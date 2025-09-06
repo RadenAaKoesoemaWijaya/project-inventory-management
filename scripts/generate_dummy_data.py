@@ -3,9 +3,15 @@ import pandas as pd
 import numpy as np
 import random
 from datetime import datetime, timedelta
+import os
 
-# Connect to the database
-conn = sqlite3.connect('c:/Users/koeso/OneDrive/Desktop/Inventory Management/inventory.db')
+# Create data directory if it doesn't exist
+data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+os.makedirs(data_dir, exist_ok=True)
+
+# Connect to the database using relative path
+db_path = os.path.join(data_dir, 'inventory.db')
+conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 # Define healthcare consumable items
@@ -52,16 +58,16 @@ for item in items:
     item["current_stock"] = random.randint(200, 3500)
     item["min_stock"] = int(item["current_stock"] * 0.15)  # Set minimum stock at 15% of current stock
 
-# Insert departments if they don't exist
+# Insert departments if they don't exist - Updated to cluster-based departments
 departments = [
-    {"name": "Instalasi Gawat Darurat"},
-    {"name": "Rawat Inap"},
-    {"name": "Rawat Jalan"},
-    {"name": "Kamar Operasi"},
-    {"name": "Laboratorium"},
-    {"name": "Radiologi"},
-    {"name": "Farmasi"},
-    {"name": "Administrasi"}
+    {"name": "Management"},
+    {"name": "Mother and Child"},
+    {"name": "Productive and Elderly Age"},
+    {"name": "Infectious Disease Prevention"},
+    {"name": "Cross-Cluster (Pharmacy)"},
+    {"name": "Cross-Cluster (Laboratory)"},
+    {"name": "Cross-Cluster (Dental Health)"},
+    {"name": "Cross-Cluster (Emergency Services)"}
 ]
 
 # Check if departments table exists
@@ -162,14 +168,14 @@ while current_date <= end_date:
         if transaction_type == "issue":
             # Issue quantity between 1% and 5% of current stock
             quantity = int(item_stock * random.uniform(0.01, 0.05))
-            from_dept = 7  # Farmasi
-            to_dept = random.choice([dept for dept in dept_ids if dept != 7])
+            from_dept = 1  # Management (updated from Farmasi)
+            to_dept = random.choice([dept for dept in dept_ids if dept != 1])
             notes = f"Distribusi rutin {item_name}"
         else:
             # Receive quantity between 10% and 30% of current stock
             quantity = int(item_stock * random.uniform(0.1, 0.3))
             from_dept = None
-            to_dept = 7  # Farmasi
+            to_dept = 1  # Management (updated from Farmasi)
             notes = f"Penerimaan stok {item_name}"
         
         # Ensure quantity is at least 1

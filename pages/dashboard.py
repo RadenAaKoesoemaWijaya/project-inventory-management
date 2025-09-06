@@ -11,7 +11,7 @@ from utils.helpers import get_stock_status, get_department_consumption, get_top_
 def app():
     require_auth()
     
-    st.title("Dashboard Inventaris Rumah Sakit")
+    st.title("Dashboard SIMASYANTO")
     
     # Get stock status
     stock_status = get_stock_status()

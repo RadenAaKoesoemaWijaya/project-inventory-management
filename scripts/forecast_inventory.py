@@ -11,8 +11,6 @@ import os
 # Create a list to store forecasting results
 forecast_results = []
 
-# Then later in the script, after processing each item, you'll append to this list
-# ...
 
 # After all items are processed, convert to DataFrame
 forecast_df = pd.DataFrame(forecast_results)
