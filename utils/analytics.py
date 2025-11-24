@@ -183,7 +183,7 @@ class InventoryAnalytics:
             total_items = len(items)
             
             if total_items == 0:
-                return {'score': 0, 'factors': {}}
+                return {'score': 0, 'factors': {}, 'total_items': 0}
             
             # Calculate health factors
             factors = {}

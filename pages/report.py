@@ -580,96 +580,119 @@ def custom_report():
     
     st.write("Buat laporan kustom berdasarkan kebutuhan spesifik Anda.")
 
-    # Get all tables and columns
-    conn = get_db_connection()
+    # Get MongoDB database connection
+    db = MongoDBConnection.get_database()
     
-    # Get tables
-    tables = pd.read_sql_query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-        conn
-    )
+    # Get available collections (tables) from MongoDB
+    collections = db.list_collection_names()
     
-    # Create dictionary to store table columns
-    table_columns = {}
+    # Filter out system collections
+    collections = [col for col in collections if not col.startswith('system.')]
     
-    for _, table in tables.iterrows():
-        table_name = table['name']
-        columns = pd.read_sql_query(f"PRAGMA table_info({table_name})", conn)
-        table_columns[table_name] = columns['name'].tolist()
+    if not collections:
+        st.warning("Tidak ada koleksi data yang tersedia.")
+        return
     
-    conn.close()
+    # Create dictionary to store collection fields
+    collection_fields = {}
+    
+    for collection_name in collections:
+        # Get sample document to infer fields
+        sample_doc = db[collection_name].find_one()
+        if sample_doc:
+            # Get all fields from sample document
+            fields = list(sample_doc.keys())
+            # Remove MongoDB internal fields
+            fields = [field for field in fields if not field.startswith('_')]
+            collection_fields[collection_name] = fields
+        else:
+            collection_fields[collection_name] = []
     
     # Report builder interface
-    st.write("### Pilih Tabel dan Kolom")
+    st.write("### Pilih Koleksi Data dan Kolom")
     
-    selected_table = st.selectbox("Pilih Tabel", tables['name'].tolist())
+    selected_collection = st.selectbox("Pilih Koleksi Data", collections)
     
-    if selected_table:
-        available_columns = table_columns[selected_table]
-        selected_columns = st.multiselect("Pilih Kolom", available_columns, default=available_columns[:5])
+    if selected_collection and collection_fields[selected_collection]:
+        available_fields = collection_fields[selected_collection]
+        selected_fields = st.multiselect("Pilih Kolom", available_fields, default=available_fields[:5])
         
         # Add filters
         st.write("### Tambahkan Filter (Opsional)")
         
         add_filter = st.checkbox("Tambahkan Filter")
         
-        filter_conditions = []
-        filter_params = []
+        filter_dict = {}
         
         if add_filter:
-            filter_column = st.selectbox("Kolom Filter", available_columns)
-            filter_operator = st.selectbox("Operator", ["=", ">", "<", ">=", "<=", "LIKE", "IN"])
+            filter_field = st.selectbox("Kolom Filter", available_fields)
+            filter_operator = st.selectbox("Operator", ["=", ">", "<", ">=", "<=", "Contains", "In"])
             
-            if filter_operator == "IN":
+            if filter_operator == "In":
                 filter_value = st.text_input("Nilai (pisahkan dengan koma)")
                 if filter_value:
                     values = [v.strip() for v in filter_value.split(",")]
-                    placeholders = ", ".join(["?" for _ in values])
-                    filter_conditions.append(f"{filter_column} IN ({placeholders})")
-                    filter_params.extend(values)
-            elif filter_operator == "LIKE":
+                    filter_dict[filter_field] = {"$in": values}
+            elif filter_operator == "Contains":
                 filter_value = st.text_input("Nilai")
                 if filter_value:
-                    filter_conditions.append(f"{filter_column} LIKE ?")
-                    filter_params.append(f"%{filter_value}%")
+                    filter_dict[filter_field] = {"$regex": filter_value, "$options": "i"}
             else:
                 filter_value = st.text_input("Nilai")
                 if filter_value:
-                    filter_conditions.append(f"{filter_column} {filter_operator} ?")
-                    filter_params.append(filter_value)
+                    try:
+                        if filter_operator == "=":
+                            filter_dict[filter_field] = filter_value
+                        elif filter_operator == ">":
+                            filter_dict[filter_field] = {"$gt": float(filter_value)}
+                        elif filter_operator == "<":
+                            filter_dict[filter_field] = {"$lt": float(filter_value)}
+                        elif filter_operator == ">=":
+                            filter_dict[filter_field] = {"$gte": float(filter_value)}
+                        elif filter_operator == "<=":
+                            filter_dict[filter_field] = {"$lte": float(filter_value)}
+                    except ValueError:
+                        st.warning(f"Nilai '{filter_value}' tidak valid untuk operator numerik")
         
         # Add sorting
         st.write("### Tambahkan Pengurutan (Opsional)")
         
         add_sort = st.checkbox("Tambahkan Pengurutan")
         
-        sort_clause = ""
+        sort_field = None
+        sort_direction = 1  # Default ascending
         
         if add_sort:
-            sort_column = st.selectbox("Kolom Pengurutan", available_columns)
-            sort_direction = st.selectbox("Arah", ["Ascending", "Descending"])
+            sort_field = st.selectbox("Kolom Pengurutan", available_fields)
+            sort_direction_str = st.selectbox("Arah", ["Ascending", "Descending"])
+            sort_direction = -1 if sort_direction_str == "Descending" else 1
             
             sort_dir = "ASC" if sort_direction == "Ascending" else "DESC"
-            sort_clause = f"ORDER BY {sort_column} {sort_dir}"
         
         # Generate and run query
         if st.button("Jalankan Laporan"):
-            if selected_columns:
-                # Build query
-                columns_str = ", ".join(selected_columns)
-                query = f"SELECT {columns_str} FROM {selected_table}"
-                
-                if filter_conditions:
-                    query += " WHERE " + " AND ".join(filter_conditions)
-                
-                if sort_clause:
-                    query += f" {sort_clause}"
-                
-                # Execute query
-                conn = get_db_connection()
+            if selected_fields:
                 try:
-                    result = pd.read_sql_query(query, conn, params=filter_params)
-                    conn.close()
+                    # Build MongoDB query
+                    collection = db[selected_collection]
+                    
+                    # Create projection for selected fields
+                    projection = {field: 1 for field in selected_fields}
+                    projection['_id'] = 0  # Exclude _id field
+                    
+                    # Build sort parameter
+                    sort_param = None
+                    if sort_field:
+                        sort_param = [(sort_field, sort_direction)]
+                    
+                    # Execute query
+                    if sort_param:
+                        cursor = collection.find(filter_dict, projection).sort(sort_param)
+                    else:
+                        cursor = collection.find(filter_dict, projection)
+                    
+                    # Convert to DataFrame
+                    result = pd.DataFrame(list(cursor))
                     
                     if not result.empty:
                         st.write("### Hasil Laporan")
@@ -679,44 +702,47 @@ def custom_report():
                         col1, col2 = st.columns(2)
                         
                         with col1:
-                            if st.button("Ekspor ke CSV", key="custom_csv"):
-                                csv = result.to_csv(index=False)
-                                st.download_button(
-                                    label="Download CSV",
-                                    data=csv,
-                                    file_name=f"custom_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                                    mime="text/csv"
-                                )
+                            csv = result.to_csv(index=False)
+                            st.download_button(
+                                label="Download CSV",
+                                data=csv,
+                                file_name=f"custom_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
+                            )
                         
                         with col2:
-                            df = pd.DataFrame(transactions)
                             # Create Excel binary data
                             output = io.BytesIO()
                             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                                df.to_excel(writer, sheet_name='Sheet1', index=False)
+                                result.to_excel(writer, sheet_name='Sheet1', index=False)
                             output.seek(0)
                             excel_data = output.getvalue()
-                            # Sebelum menggunakan excel_data dalam download button, periksa apakah nilainya valid
-                            if excel_data is not None:
-                                st.download_button(
-                                    label="Download Excel",
-                                    data=excel_data,
-                                    file_name="custom_report.xlsx",
-                                    mime="application/vnd.ms-excel"
-                                )
-                            else:
-                                st.warning("Data belum tersedia untuk diunduh. Silakan pilih dan proses data terlebih dahulu.")
-                                st.download_button(
-                                    label="Download Excel",
-                                    data=excel_data,
-                                    file_name=f"custom_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                                    mime="application/vnd.ms-excel"
-                                )
+                            
+                            st.download_button(
+                                label="Download Excel",
+                                data=excel_data,
+                                file_name=f"custom_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        
+                        # Show summary statistics
+                        st.write("### Ringkasan Statistik")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Total Baris", len(result))
+                        with col2:
+                            st.metric("Total Kolom", len(result.columns))
+                        with col3:
+                            st.metric("Ukuran Data", f"{result.memory_usage(deep=True).sum() / 1024:.1f} KB")
+                            
                     else:
-                        st.info("Tidak ada data yang ditemukan untuk kriteria yang dipilih.")
+                        st.info("Tidak ada data yang sesuai dengan filter yang dipilih.")
+                        
                 except Exception as e:
-                    st.error(f"Error menjalankan query: {e}")
-                    conn.close()
+                    st.error(f"Error menjalankan laporan: {str(e)}")
+                    
+    else:
+        st.info("Koleksi yang dipilih tidak memiliki field yang tersedia.")
     
 if __name__ == "__main__":
     app()
