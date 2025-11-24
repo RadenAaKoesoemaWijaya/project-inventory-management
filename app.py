@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils.auth import login_user, logout_user, get_user_by_id, update_user
-from utils.database import MongoDBConnection, get_items_low_stock, get_recent_transactions, init_db
+from utils.database import MongoDBConnection, get_items_low_stock, get_recent_transactions, init_db, get_warehouse_consumption
 from utils.helpers import get_stock_status, get_department_consumption, get_top_consumed_items
 import os
 from datetime import datetime
@@ -18,13 +18,79 @@ def initialize_database():
         st.error(f"Failed to initialize database: {e}")
         return False
 
-# Set page configuration
+# Set page configuration with agriculture theme
 st.set_page_config(
-    page_title="KALKULIS",
-    page_icon="🏥",
+    page_title="Lumbung Digital - Manajemen Hasil Pertanian",
+    page_icon="🌾",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': "Sistem Lumbung Digital - Manajemen hasil pertanian, forecasting bibit & pupuk, serta distribusi ke pedagang lokal"
+    }
 )
+
+# Custom CSS for agriculture theme
+st.markdown("""
+<style>
+    /* Agriculture theme colors */
+    .stApp {
+        background: linear-gradient(135deg, #f5f9f5 0%, #e8f5e8 100%);
+    }
+    
+    /* Custom header */
+    .agri-header {
+        background: linear-gradient(135deg, #4CAF50, #8BC34A, #CDDC39);
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Agriculture cards */
+    .agri-card {
+        background: white;
+        border-left: 5px solid #4CAF50;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Fertilizer themed elements */
+    .fertilizer-badge {
+        background: linear-gradient(45deg, #FF6B35, #F7931E);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8em;
+        font-weight: bold;
+    }
+    
+    /* Seed themed elements */
+    .seed-badge {
+        background: linear-gradient(45deg, #8B4513, #D2691E);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8em;
+        font-weight: bold;
+    }
+    
+    /* Harvest themed elements */
+    .harvest-badge {
+        background: linear-gradient(45deg, #FFD700, #FFA500);
+        color: #333;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8em;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'authenticated' not in st.session_state:
@@ -32,11 +98,17 @@ if 'authenticated' not in st.session_state:
 
 # Initialize database
 if 'db_initialized' not in st.session_state:
-    st.session_state['db_initialized'] = initialize_database()
+    with st.spinner("🌾 Sedang mempersiapkan sistem lumbung digital..."):
+        st.session_state['db_initialized'] = initialize_database()
 
 # Sidebar navigation
 def sidebar_nav():
-    st.sidebar.title("Navigasi KALKULIS")
+    st.sidebar.markdown("""
+    <div style="text-align: center; padding: 10px; background: linear-gradient(135deg, #4CAF50, #8BC34A); border-radius: 10px; margin-bottom: 20px;">
+        <h3 style="color: white; margin: 0; font-size: 1.1em;">🌾 LUMBUNG DIGITAL</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0; font-size: 0.8em;">Sistem Manajemen Pertanian</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     if st.session_state.get('authenticated', False):
         user = st.session_state['user']
@@ -49,14 +121,15 @@ def sidebar_nav():
         # Navigation menu
         menu_options = [
             "Dashboard",
-            "Manajemen Inventori", 
-            "Permintaan Barang",
-            "Transfer Barang",
+            "Manajemen Lumbung", 
+            "Manajemen Petani",
+            "Manajemen Pedagang",
+            "Hasil Panen",
+            "Pemetaan Distribusi",
+            "Forecasting Kebutuhan",
             "Laporan",
-            "Forecasting",
             "Profil Pengguna",
             "Notifikasi",
-            "Rekomendasi",
             "Analytics"
         ]
         
@@ -78,7 +151,7 @@ def sidebar_nav():
 
 # Login page
 def login_page():
-    st.title("Kalkulasi Kebutuhan Logistik (KALKULIS)")
+    st.title("Sistem Lumbung Digital - Manajemen Hasil Pertanian Desa")
     
     # Create tabs for login and registration
     login_tab, register_tab, info_tab = st.tabs(["Login", "Daftar Baru", "Tentang Aplikasi"])
@@ -87,7 +160,26 @@ def login_page():
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            st.image("https://img.freepik.com/free-vector/hospital-logo-design-vector-medical-cross_53876-136743.jpg", width=300)
+            # Custom agriculture logo with fertilizer, seeds, and farming elements
+            st.markdown("""
+            <div style="text-align: center; background: linear-gradient(135deg, #4CAF50, #8BC34A, #CDDC39); padding: 25px; border-radius: 20px; box-shadow: 0 6px 12px rgba(0,0,0,0.3);">
+                <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 10px;">
+                    <div style="background: rgba(255,255,255,0.95); padding: 12px; border-radius: 50%; font-size: 2em; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🌾</div>
+                    <div style="background: rgba(255,255,255,0.95); padding: 12px; border-radius: 50%; font-size: 2em; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🌱</div>
+                    <div style="background: rgba(255,255,255,0.95); padding: 12px; border-radius: 50%; font-size: 2em; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">💧</div>
+                </div>
+                <h1 style="color: white; margin: 0; font-size: 1.8em; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">🚜 LUMBUNG DIGITAL 🌿</h1>
+                <div style="display: flex; justify-content: center; gap: 15px; margin: 15px 0;">
+                    <div style="background: rgba(139,69,19,0.9); color: white; padding: 8px 12px; border-radius: 15px; font-size: 0.9em;">🌰 Bibit</div>
+                    <div style="background: rgba(255,140,0,0.9); color: white; padding: 8px 12px; border-radius: 15px; font-size: 0.9em;">💊 Pupuk</div>
+                    <div style="background: rgba(34,139,34,0.9); color: white; padding: 8px 12px; border-radius: 15px; font-size: 0.9em;">🌾 Panen</div>
+                </div>
+                <div style="background: rgba(255,255,255,0.2); padding: 10px; border-radius: 10px; margin-top: 10px;">
+                    <p style="color: white; margin: 0; font-size: 0.85em; font-weight: bold;">Sistem Manajemen Hasil Pertanian</p>
+                    <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0; font-size: 0.75em;">Forecasting • Distribusi • Inventory</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
         with col2:
             st.subheader("Silakan Login")
@@ -114,19 +206,19 @@ def login_page():
             # Default role for new users
             role = st.selectbox("Role", ["staff", "manager"], index=0)
             
-            # Updated department selection with new klaster options
-            departments = [
-                "Klaster Manajemen",
-                "Klaster Ibu dan Anak", 
-                "Klaster Usia Produktif dan Lanjut Usia",
-                "Klaster Pencegahan Penyakit Menular",
-                "Lintas Klaster - Apotek Farmasi",
-                "Lintas Klaster - Laboratorium",
-                "Lintas Klaster - Kesehatan Gigi",
-                "Lintas Klaster - Layanan Kegawatdaruratan"
+            # Updated warehouse selection for agricultural system
+            warehouses = [
+                "Lumbung Desa Sentra Tani",
+                "Lumbung Desa Tambakrejo", 
+                "Lumbung Desa Ngadirejo",
+                "Lumbung Desa Tlogosari",
+                "Lumbung Desa Bandungrejo",
+                "Lumbung Desa Purworejo",
+                "Lumbung Desa Sumberagung",
+                "Lumbung Desa Karanganyar"
             ]
             
-            department = st.selectbox("Departemen/Klaster", departments)
+            department = st.selectbox("Lumbung/Lokasi", warehouses)
             
             submit_button = st.form_submit_button("Daftar")
             
@@ -147,42 +239,48 @@ def login_page():
                         st.error(f"Pendaftaran gagal: {message}")
     
     with info_tab:
-        st.subheader("Tentang KALKULIS")
+        st.subheader("Tentang Sistem Lumbung Digital")
         
         st.markdown("""
                 
         ### Fungsi Utama:
-        - **Manajemen Stok**: Monitoring stok barang medis dan non-medis secara real-time
-        - **Pengadaan**: Mengelola permintaan dan pengadaan barang
-        - **Distribusi**: Tracking distribusi barang antar departemen
-        - **Laporan**: Menghasilkan laporan konsumsi dan stok
-        - **Forecasting**: Prediksi kebutuhan stok berdasarkan histori penggunaan
+        - **Manajemen Lumbung**: Monitoring stok hasil pertanian di lumbung desa secara real-time
+        - **Manajemen Petani**: Data petani dan lahan pertanian
+        - **Manajemen Pedagang**: Data pedagang lokal dan lokasi distribusi
+        - **Hasil Panen**: Pencatatan dan analisis hasil panen per musim
+        - **Pemetaan Distribusi**: Jalur distribusi paling efisien ke pedagang lokal
+        - **Forecasting**: Prediksi kebutuhan bibit dan pupuk berdasarkan data historis
         
         ### Cara Penggunaan:
         1. **Login**: Gunakan akun yang telah terdaftar atau daftar akun baru
-        2. **Dashboard**: Lihat ringkasan stok dan transaksi terbaru
-        3. **Manajemen Inventori**: Tambah, edit, dan hapus item inventori
-        4. **Permintaan**: Buat permintaan pengadaan barang
-        5. **Transfer**: Kelola transfer barang antar departemen
-        6. **Laporan**: Lihat laporan konsumsi dan prediksi kebutuhan
+        2. **Dashboard**: Lihat ringkasan stok hasil panen dan distribusi
+        3. **Manajemen Lumbung**: Kelola stok di berbagai lumbung desa
+        4. **Manajemen Petani**: Tambah dan kelola data petani
+        5. **Manajemen Pedagang**: Kelola data pedagang lokal
+        6. **Hasil Panen**: Catat dan analisis hasil panen
+        7. **Pemetaan Distribusi**: Tentukan jalur distribusi paling efisien
+        8. **Forecasting**: Prediksi kebutuhan bibit dan pupuk
+        9. **Laporan**: Lihat laporan hasil panen dan distribusi
         
         ### Role Pengguna:
         - **Admin**: Memiliki akses penuh ke semua fitur
-        - **Staff**: Dapat mengelola inventori dan membuat permintaan
-        - **Manager**: Dapat melihat laporan dan approve permintaan
+        - **Staff**: Dapat mengelola inventori dan data petani
+        - **Manager**: Dapat melihat laporan dan approve distribusi
         
         ### Fitur Tambahan:
-        - Notifikasi stok rendah otomatis
-        - Prediksi kebutuhan stok berdasarkan AI
-        - Grafik visualisasi data konsumsi
+        - Notifikasi stok hasil panen rendah otomatis
+        - Prediksi kebutuhan bibit dan pupuk berdasarkan AI
+        - Grafik visualisasi data panen dan distribusi
         - Export laporan ke format Excel/PDF
+        - Pemetaan rute distribusi paling efisien
+        - Analisis musim panen dan kualitas hasil
         """)
         
         st.info("💡 **Tips**: Pastikan untuk selalu logout setelah selesai menggunakan aplikasi untuk menjaga keamanan data!")
 
 # Dashboard page
 def dashboard_page():
-    st.title("Dashboard KALKULIS")
+    st.title("Dashboard Sistem Lumbung Digital")
     
     # Get stock status
     stock_status = get_stock_status()
@@ -191,16 +289,16 @@ def dashboard_page():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Total Item", stock_status['total_items'])
+        st.metric("Total Hasil Panen", stock_status['total_items'])
     
     with col2:
-        st.metric("Stok Sehat", stock_status['healthy_stock'])
+        st.metric("Stok Lumbung Sehat", stock_status['healthy_stock'])
     
     with col3:
-        st.metric("Stok Rendah", stock_status['low_stock'])
+        st.metric("Stok Lumbung Rendah", stock_status['low_stock'])
     
     with col4:
-        st.metric("Stok Habis", stock_status['out_of_stock'])
+        st.metric("Stok Lumbung Habis", stock_status['out_of_stock'])
     
     # Display low stock items
     st.subheader("Item dengan Stok Rendah")
@@ -233,23 +331,23 @@ def dashboard_page():
     else:
         st.info("Belum ada transaksi.")
     
-    # Department consumption
-    st.subheader("Konsumsi per Departemen (30 Hari Terakhir)")
-    dept_consumption = get_department_consumption()
+    # Warehouse consumption
+    st.subheader("Distribusi per Lumbung (30 Hari Terakhir)")
+    warehouse_consumption = get_warehouse_consumption()
     
-    if not dept_consumption.empty:
-        st.bar_chart(dept_consumption.set_index('department')['total_consumption'])
+    if not warehouse_consumption.empty:
+        st.bar_chart(warehouse_consumption.set_index('warehouse')['total_distribution'])
     else:
-        st.info("Belum ada data konsumsi departemen.")
+        st.info("Belum ada data distribusi lumbung.")
     
     # Top consumed items
-    st.subheader("Item Paling Banyak Digunakan (30 Hari Terakhir)")
+    st.subheader("Hasil Panen Terbanyak (30 Hari Terakhir)")
     top_items = get_top_consumed_items(limit=5)
     
     if not top_items.empty:
         st.bar_chart(top_items.set_index('item_name')['total_consumption'])
     else:
-        st.info("Belum ada data konsumsi item.")
+        st.info("Belum ada data hasil panen.")
 
 # Profile page
 def profile_page():
@@ -281,25 +379,25 @@ def profile_page():
     with st.form("update_profile_form"):
         new_full_name = st.text_input("Nama Lengkap Baru", value=current_name)
         
-        # Updated department selection with new klaster options
-        departments = [
-            "Klaster Manajemen",
-            "Klaster Ibu dan Anak", 
-            "Klaster Usia Produktif dan Lanjut Usia",
-            "Klaster Pencegahan Penyakit Menular",
-            "Lintas Klaster - Apotek Farmasi",
-            "Lintas Klaster - Laboratorium",
-            "Lintas Klaster - Kesehatan Gigi",
-            "Lintas Klaster - Layanan Kegawatdaruratan"
+        # Updated warehouse selection for agricultural system
+        warehouses = [
+            "Lumbung Desa Sentra Tani",
+            "Lumbung Desa Tambakrejo", 
+            "Lumbung Desa Ngadirejo",
+            "Lumbung Desa Tlogosari",
+            "Lumbung Desa Bandungrejo",
+            "Lumbung Desa Purworejo",
+            "Lumbung Desa Sumberagung",
+            "Lumbung Desa Karanganyar"
         ]
         
-        # Find current department index
+        # Find current warehouse index
         try:
-            current_dept_index = departments.index(current_department)
+            current_dept_index = warehouses.index(current_department)
         except ValueError:
             current_dept_index = 0
             
-        new_department = st.selectbox("Departemen/Klaster Baru", departments, index=current_dept_index)
+        new_department = st.selectbox("Lumbung/Lokasi Baru", warehouses, index=current_dept_index)
         
         submit_profile = st.form_submit_button("Update Profil")
         
@@ -377,15 +475,23 @@ def profile_page():
 
 # Wrapper functions for page modules
 def inventory_page():
-    from pages.inventory import app
+    from pages.warehouse import app
     app()
 
-def requests_page():
-    from pages.requests import app
+def farmers_page():
+    from pages.farmers import app
     app()
 
-def transfers_page():
-    from pages.transfers import app
+def merchants_page():
+    from pages.merchants import app
+    app()
+
+def harvests_page():
+    from pages.harvests import app
+    app()
+
+def distribution_page():
+    from pages.distribution import app
     app()
 
 def report_page():
@@ -412,28 +518,28 @@ def main():
             dashboard_page()
         elif page == "Profil Pengguna":
             profile_page()
-        elif page == "Manajemen Inventori":
+        elif page == "Manajemen Lumbung":
             inventory_page()
-        elif page == "Permintaan Barang":
-            requests_page()
-        elif page == "Transfer Barang":
-            transfers_page()
+        elif page == "Manajemen Petani":
+            farmers_page()
+        elif page == "Manajemen Pedagang":
+            merchants_page()
+        elif page == "Hasil Panen":
+            harvests_page()
+        elif page == "Pemetaan Distribusi":
+            distribution_page()
+        elif page == "Forecasting Kebutuhan":
+            forecast_page()
+        elif page == "Laporan":
+            report_page()
         elif page == "Notifikasi":
             from utils.notifications import NotificationManager
             manager = NotificationManager()
             manager.display_notification_dashboard()
-        elif page == "Rekomendasi":
-            from utils.recommendations import InventoryRecommendation
-            recommender = InventoryRecommendation()
-            recommender.display_recommendation_dashboard()
         elif page == "Analytics":
             from utils.analytics import InventoryAnalytics
             analytics = InventoryAnalytics()
             analytics.display_analytics_dashboard()
-        elif page == "Laporan":
-            report_page()
-        elif page == "Forecasting":
-            forecast_page()
         elif page == "Manajemen Pengguna":
             if st.session_state['user']['role'] == 'admin':
                 st.title("Manajemen Pengguna")

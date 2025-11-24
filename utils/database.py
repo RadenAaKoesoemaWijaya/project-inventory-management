@@ -77,22 +77,60 @@ class MongoDBConnection:
             db.users.create_index([("role", ASCENDING)])
             db.users.create_index([("department", ASCENDING)])
             
-            # Items collection indexes
+            # Items collection indexes (agricultural products)
             db.items.create_index([("name", ASCENDING)])
             db.items.create_index([("category", ASCENDING)])
             db.items.create_index([("current_stock", ASCENDING)])
             db.items.create_index([("min_stock", ASCENDING)])
+            db.items.create_index([("warehouse_id", ASCENDING)])
+            db.items.create_index([("harvest_season", ASCENDING)])
+            
+            # Warehouses collection indexes
+            db.warehouses.create_index([("name", ASCENDING)], unique=True)
+            db.warehouses.create_index([("location", ASCENDING)])
+            
+            # Farmers collection indexes
+            db.farmers.create_index([("name", ASCENDING)])
+            db.farmers.create_index([("location", ASCENDING)])
+            
+            # Merchants collection indexes
+            db.merchants.create_index([("name", ASCENDING)])
+            db.merchants.create_index([("location", ASCENDING)])
+            db.merchants.create_index([("type", ASCENDING)])
+            
+            # Harvests collection indexes
+            db.harvests.create_index([("farmer_id", ASCENDING)])
+            db.harvests.create_index([("warehouse_id", ASCENDING)])
+            db.harvests.create_index([("harvest_date", DESCENDING)])
+            db.harvests.create_index([("season", ASCENDING)])
+            
+            # Seeds collection indexes
+            db.seeds.create_index([("name", ASCENDING)])
+            db.seeds.create_index([("crop_type", ASCENDING)])
+            db.seeds.create_index([("supplier", ASCENDING)])
+            
+            # Fertilizers collection indexes
+            db.fertilizers.create_index([("name", ASCENDING)])
+            db.fertilizers.create_index([("type", ASCENDING)])
+            db.fertilizers.create_index([("supplier", ASCENDING)])
+            
+            # Distribution routes collection indexes
+            db.distribution_routes.create_index([("from_warehouse_id", ASCENDING)])
+            db.distribution_routes.create_index([("to_merchant_id", ASCENDING)])
+            db.distribution_routes.create_index([("distance", ASCENDING)])
+            db.distribution_routes.create_index([("efficiency_score", DESCENDING)])
             
             # Transactions collection indexes
             db.inventory_transactions.create_index([("item_id", ASCENDING)])
             db.inventory_transactions.create_index([("transaction_type", ASCENDING)])
             db.inventory_transactions.create_index([("transaction_date", DESCENDING)])
             db.inventory_transactions.create_index([("created_by", ASCENDING)])
+            db.inventory_transactions.create_index([("warehouse_id", ASCENDING)])
             
             # Requests collection indexes
             db.item_requests.create_index([("status", ASCENDING)])
             db.item_requests.create_index([("request_date", DESCENDING)])
-            db.item_requests.create_index([("department_id", ASCENDING)])
+            db.item_requests.create_index([("warehouse_id", ASCENDING)])
             
             logger.info("Database indexes created successfully")
             
@@ -126,7 +164,7 @@ def init_db():
         db = MongoDBConnection.get_database()
         
         # Create collections if they don't exist
-        collections = ['users', 'items', 'departments', 'inventory_transactions', 'item_requests', 'notifications']
+        collections = ['users', 'items', 'warehouses', 'farmers', 'merchants', 'harvests', 'seeds', 'fertilizers', 'distribution_routes', 'inventory_transactions', 'item_requests', 'notifications']
         existing_collections = db.list_collection_names()
         
         for collection in collections:
@@ -134,27 +172,22 @@ def init_db():
                 db.create_collection(collection)
                 logger.info(f"Created collection: {collection}")
         
-        # Insert default departments
-        default_departments = [
-            {"name": "Klaster Manajemen", "description": "Manajemen dan administrasi"},
-            {"name": "Klaster Ibu dan Anak", "description": "Layanan kesehatan ibu dan anak"},
-            {"name": "Klaster Usia Produktif dan Lanjut Usia", "description": "Layanan untuk usia produktif dan lansia"},
-            {"name": "Klaster Pencegahan Penyakit Menular", "description": "Pencegahan dan penanggulangan penyakit menular"},
-            {"name": "Lintas Klaster - Apotek Farmasi", "description": "Pelayanan farmasi dan apotek"},
-            {"name": "Lintas Klaster - Laboratorium", "description": "Pemeriksaan laboratorium"},
-            {"name": "Lintas Klaster - Kesehatan Gigi", "description": "Pelayanan kesehatan gigi"},
-            {"name": "Lintas Klaster - Layanan Kegawatdaruratan", "description": "Layanan gawat darurat"},
-            {"name": "Warehouse", "description": "Main storage facility"},
-            {"name": "Emergency Room", "description": "ER department"},
-            {"name": "Surgery", "description": "Surgery department"},
-            {"name": "Pharmacy", "description": "Pharmacy department"},
-            {"name": "Laboratory", "description": "Laboratory department"}
+        # Insert default warehouses (lumbung desa)
+        default_warehouses = [
+            {"name": "Lumbung Desa Sentra Tani", "description": "Lumbung utama untuk menyimpan hasil pertanian desa", "location": "Pusat Desa", "capacity": 50000},
+            {"name": "Lumbung Desa Tambakrejo", "description": "Lumbung untuk wilayah Tambakrejo", "location": "Tambakrejo", "capacity": 30000},
+            {"name": "Lumbung Desa Ngadirejo", "description": "Lumbung untuk wilayah Ngadirejo", "location": "Ngadirejo", "capacity": 25000},
+            {"name": "Lumbung Desa Tlogosari", "description": "Lumbung untuk wilayah Tlogosari", "location": "Tlogosari", "capacity": 35000},
+            {"name": "Lumbung Desa Bandungrejo", "description": "Lumbung untuk wilayah Bandungrejo", "location": "Bandungrejo", "capacity": 20000},
+            {"name": "Lumbung Desa Purworejo", "description": "Lumbung untuk wilayah Purworejo", "location": "Purworejo", "capacity": 15000},
+            {"name": "Lumbung Desa Sumberagung", "description": "Lumbung untuk wilayah Sumberagung", "location": "Sumberagung", "capacity": 40000},
+            {"name": "Lumbung Desa Karanganyar", "description": "Lumbung untuk wilayah Karanganyar", "location": "Karanganyar", "capacity": 18000}
         ]
         
-        for dept in default_departments:
-            db.departments.update_one(
-                {"name": dept["name"]},
-                {"$set": dept},
+        for warehouse in default_warehouses:
+            db.warehouses.update_one(
+                {"name": warehouse["name"]},
+                {"$set": warehouse},
                 upsert=True
             )
         
@@ -163,9 +196,9 @@ def init_db():
         admin_user = {
             "username": "admin",
             "password": hash_password("admin123"),
-            "full_name": "Administrator",
+            "full_name": "Administrator Pertanian",
             "role": "admin",
-            "department": "Klaster Manajemen",
+            "department": "Lumbung Desa Sentra Tani",
             "created_at": datetime.utcnow(),
             "is_active": True,
             "last_login": None
@@ -256,8 +289,102 @@ def get_items_low_stock(limit: int = 10):
         
         return df
     except Exception as e:
-        logger.error(f"Error getting low stock items: {e}")
+        logger.error(f"Error getting warehouse consumption: {e}")
         return pd.DataFrame()
+
+def get_warehouse_products(warehouse_id=None):
+    """Get warehouse products with stock information"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        query = {}
+        if warehouse_id:
+            query["warehouse_id"] = ObjectId(warehouse_id)
+        
+        pipeline = [
+            {"$match": query},
+            {
+                "$lookup": {
+                    "from": "warehouses",
+                    "localField": "warehouse_id",
+                    "foreignField": "_id",
+                    "as": "warehouse"
+                }
+            },
+            {"$unwind": "$warehouse"},
+            {
+                "$project": {
+                    "name": 1,
+                    "category": 1,
+                    "current_stock": 1,
+                    "min_stock": 1,
+                    "max_stock": 1,
+                    "unit": 1,
+                    "price_per_unit": 1,
+                    "expiry_date": 1,
+                    "warehouse_name": "$warehouse.name",
+                    "status": {
+                        "$switch": {
+                            "branches": [
+                                {"case": {"$eq": ["$current_stock", 0]}, "then": "habis"},
+                                {"case": {"$lte": ["$current_stock", "$min_stock"]}, "then": "rendah"},
+                                {"case": {"$gte": ["$current_stock", "$max_stock"]}, "then": "berlebih"}
+                            ],
+                            "default": "normal"
+                        }
+                    }
+                }
+            },
+            {"$sort": {"warehouse_name": 1, "name": 1}}
+        ]
+        
+        products = list(db.warehouse_products.aggregate(pipeline))
+        return products
+    except Exception as e:
+        logger.error(f"Error getting warehouse products: {e}")
+        return []
+
+def add_warehouse_product(product_data):
+    """Add new warehouse product"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        product_data['warehouse_id'] = ObjectId(product_data['warehouse_id'])
+        product_data['created_date'] = datetime.utcnow()
+        product_data['updated_date'] = datetime.utcnow()
+        
+        result = db.warehouse_products.insert_one(product_data)
+        return result.inserted_id is not None
+    except Exception as e:
+        logger.error(f"Error adding warehouse product: {e}")
+        return False
+
+def update_warehouse_product(product_id, update_data):
+    """Update warehouse product"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        update_data['updated_date'] = datetime.utcnow()
+        
+        result = db.warehouse_products.update_one(
+            {"_id": ObjectId(product_id)},
+            {"$set": update_data}
+        )
+        return result.modified_count > 0
+    except Exception as e:
+        logger.error(f"Error updating warehouse product: {e}")
+        return False
+
+def get_product_categories():
+    """Get unique product categories"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        categories = db.warehouse_products.distinct("category")
+        return sorted(categories)
+    except Exception as e:
+        logger.error(f"Error getting product categories: {e}")
+        return []
 
 def get_recent_transactions(limit: int = 10):
     """Get recent inventory transactions"""
@@ -319,8 +446,8 @@ def get_recent_transactions(limit: int = 10):
         logger.error(f"Error getting recent transactions: {e}")
         return pd.DataFrame()
 
-def get_department_consumption(days: int = 30):
-    """Get department consumption for the last N days"""
+def get_warehouse_consumption(days: int = 30):
+    """Get warehouse consumption for the last N days"""
     try:
         db = MongoDBConnection.get_database()
         
@@ -330,32 +457,32 @@ def get_department_consumption(days: int = 30):
             {
                 "$match": {
                     "transaction_date": {"$gte": start_date},
-                    "transaction_type": {"$in": ["consumption", "transfer_out"]}
+                    "transaction_type": {"$in": ["distribution", "transfer_out"]}
                 }
             },
             {
                 "$lookup": {
-                    "from": "departments",
-                    "localField": "from_department_id",
+                    "from": "warehouses",
+                    "localField": "from_warehouse_id",
                     "foreignField": "_id",
-                    "as": "department"
+                    "as": "warehouse"
                 }
             },
-            {"$unwind": "$department"},
+            {"$unwind": "$warehouse"},
             {
                 "$group": {
-                    "_id": "$department.name",
-                    "total_consumption": {"$sum": "$quantity"}
+                    "_id": "$warehouse.name",
+                    "total_distribution": {"$sum": "$quantity"}
                 }
             },
             {
                 "$project": {
-                    "department": "$_id",
-                    "total_consumption": 1,
+                    "warehouse": "$_id",
+                    "total_distribution": 1,
                     "_id": 0
                 }
             },
-            {"$sort": {"total_consumption": -1}}
+            {"$sort": {"total_distribution": -1}}
         ]
         
         consumption = list(db.inventory_transactions.aggregate(pipeline))
@@ -364,7 +491,7 @@ def get_department_consumption(days: int = 30):
         df = pd.DataFrame(consumption)
         return df
     except Exception as e:
-        logger.error(f"Error getting department consumption: {e}")
+        logger.error(f"Error getting warehouse consumption: {e}")
         return pd.DataFrame()
 
 def get_top_consumed_items(limit: int = 5, days: int = 30):
@@ -478,3 +605,219 @@ class ChangeStreamMonitor:
             self.change_streams.clear()
         
         logger.info("Stopped change stream monitoring")
+
+# Agricultural-specific functions
+def get_farmers(location=None, limit=50):
+    """Get farmers list with optional location filter"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        query = {}
+        if location:
+            query["location"] = location
+            
+        farmers = list(db.farmers.find(query).limit(limit))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(farmers)
+        if not df.empty:
+            df['_id'] = df['_id'].astype(str)
+        
+        return df
+    except Exception as e:
+        logger.error(f"Error getting farmers: {e}")
+        return pd.DataFrame()
+
+def get_merchants(merchant_type=None, location=None, limit=50):
+    """Get merchants list with optional filters"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        query = {}
+        if merchant_type:
+            query["type"] = merchant_type
+        if location:
+            query["location"] = location
+            
+        merchants = list(db.merchants.find(query).limit(limit))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(merchants)
+        if not df.empty:
+            df['_id'] = df['_id'].astype(str)
+        
+        return df
+    except Exception as e:
+        logger.error(f"Error getting merchants: {e}")
+        return pd.DataFrame()
+
+def get_harvests_by_season(season=None, warehouse_id=None, limit=100):
+    """Get harvests by season and warehouse"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        query = {}
+        if season:
+            query["season"] = season
+        if warehouse_id:
+            query["warehouse_id"] = ObjectId(warehouse_id)
+            
+        harvests = list(db.harvests.find(query).limit(limit))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(harvests)
+        if not df.empty:
+            df['_id'] = df['_id'].astype(str)
+            if 'farmer_id' in df.columns:
+                df['farmer_id'] = df['farmer_id'].astype(str)
+            if 'warehouse_id' in df.columns:
+                df['warehouse_id'] = df['warehouse_id'].astype(str)
+        
+        return df
+    except Exception as e:
+        logger.error(f"Error getting harvests: {e}")
+        return pd.DataFrame()
+
+def get_optimal_distribution_routes(warehouse_id=None, limit=10):
+    """Get optimal distribution routes based on efficiency score"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        query = {}
+        if warehouse_id:
+            query["from_warehouse_id"] = ObjectId(warehouse_id)
+            
+        pipeline = [
+            {"$match": query},
+            {
+                "$lookup": {
+                    "from": "warehouses",
+                    "localField": "from_warehouse_id",
+                    "foreignField": "_id",
+                    "as": "from_warehouse"
+                }
+            },
+            {"$unwind": "$from_warehouse"},
+            {
+                "$lookup": {
+                    "from": "merchants",
+                    "localField": "to_merchant_id",
+                    "foreignField": "_id",
+                    "as": "to_merchant"
+                }
+            },
+            {"$unwind": "$to_merchant"},
+            {"$sort": {"efficiency_score": -1}},
+            {"$limit": limit},
+            {
+                "$project": {
+                    "route_name": 1,
+                    "from_warehouse_name": "$from_warehouse.name",
+                    "to_merchant_name": "$to_merchant.name",
+                    "distance": 1,
+                    "travel_time": 1,
+                    "efficiency_score": 1,
+                    "fuel_cost": 1,
+                    "road_condition": 1
+                }
+            }
+        ]
+        
+        routes = list(db.distribution_routes.aggregate(pipeline))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(routes)
+        if not df.empty:
+            df['_id'] = df['_id'].astype(str)
+        
+        return df
+    except Exception as e:
+        logger.error(f"Error getting distribution routes: {e}")
+        return pd.DataFrame()
+
+def get_merchants(merchant_type=None, location=None, limit=50):
+    """Get merchants with optional filtering"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        # Build query
+        query = {}
+        if merchant_type:
+            query["type"] = merchant_type
+        if location:
+            query["location"] = {"$regex": location, "$options": "i"}
+        
+        merchants = list(db.merchants.find(query).limit(limit))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(merchants)
+        if not df.empty:
+            df['_id'] = df['_id'].astype(str)
+        
+        return df
+    except Exception as e:
+        logger.error(f"Error getting merchants: {e}")
+        return pd.DataFrame()
+
+def get_warehouses(limit=50):
+    """Get warehouses"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        warehouses = list(db.warehouses.find({}).limit(limit))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(warehouses)
+        if not df.empty:
+            df['_id'] = df['_id'].astype(str)
+        
+        return df
+    except Exception as e:
+        logger.error(f"Error getting warehouses: {e}")
+        return pd.DataFrame()
+
+def get_seasonal_forecasting_data(crop_type=None, seasons=4):
+    """Get data for seasonal forecasting analysis"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        query = {}
+        if crop_type:
+            query["crop_type"] = crop_type
+            
+        # Get harvest data from last few seasons
+        pipeline = [
+            {"$match": query},
+            {
+                "$group": {
+                    "_id": {
+                        "season": "$season",
+                        "year": {"$year": "$harvest_date"}
+                    },
+                    "total_yield": {"$sum": "$total_yield"},
+                    "avg_quality": {"$avg": "$quality_score"},
+                    "count": {"$sum": 1}
+                }
+            },
+            {"$sort": {"_id.year": -1, "_id.season": -1}},
+            {"$limit": seasons},
+            {
+                "$project": {
+                    "season": "$_id.season",
+                    "year": "$_id.year",
+                    "total_yield": 1,
+                    "avg_quality": 1,
+                    "count": 1,
+                    "_id": 0
+                }
+            }
+        ]
+        
+        data = list(db.harvests.aggregate(pipeline))
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(data)
+        return df
+    except Exception as e:
+        logger.error(f"Error getting seasonal forecasting data: {e}")
+        return pd.DataFrame()
