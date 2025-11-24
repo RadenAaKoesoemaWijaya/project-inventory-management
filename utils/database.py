@@ -651,8 +651,8 @@ def get_merchants(merchant_type=None, location=None, limit=50):
         logger.error(f"Error getting merchants: {e}")
         return pd.DataFrame()
 
-def get_harvests_by_season(season=None, warehouse_id=None, limit=100):
-    """Get harvests by season and warehouse"""
+def get_harvests_by_season(season=None, warehouse_id=None, crop=None, limit=100):
+    """Get harvests by season, warehouse, and crop type"""
     try:
         db = MongoDBConnection.get_database()
         
@@ -661,6 +661,8 @@ def get_harvests_by_season(season=None, warehouse_id=None, limit=100):
             query["season"] = season
         if warehouse_id:
             query["warehouse_id"] = ObjectId(warehouse_id)
+        if crop:
+            query["crop_type"] = {"$regex": crop, "$options": "i"}  # Case insensitive search
             
         harvests = list(db.harvests.find(query).limit(limit))
         
