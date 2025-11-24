@@ -7,7 +7,7 @@ import numpy as np
 
 class InventoryRecommendation:
     def __init__(self):
-        self.db = MongoDBConnection()
+        self.db = MongoDBConnection.get_database()
     
     def get_reorder_recommendations(self) -> List[Dict]:
         """Get items that need reordering based on consumption patterns"""

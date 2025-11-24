@@ -8,7 +8,7 @@ import pandas as pd
 
 class InventoryChangeStream:
     def __init__(self):
-        self.db = MongoDBConnection()
+        self.db = MongoDBConnection.get_database()
         self.change_queue = queue.Queue()
         self.running = False
         self.thread = None

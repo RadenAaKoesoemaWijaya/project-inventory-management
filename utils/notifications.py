@@ -9,7 +9,7 @@ from typing import List, Dict, Optional
 
 class NotificationManager:
     def __init__(self):
-        self.db = MongoDBConnection()
+        self.db = MongoDBConnection.get_database()
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
         self.smtp_username = os.getenv('SMTP_USERNAME')

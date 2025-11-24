@@ -9,7 +9,7 @@ import numpy as np
 
 class InventoryAnalytics:
     def __init__(self):
-        self.db = MongoDBConnection()
+        self.db = MongoDBConnection.get_database()
     
     def get_inventory_turnover(self, days: int = 30) -> Dict:
         """Calculate inventory turnover rate"""
