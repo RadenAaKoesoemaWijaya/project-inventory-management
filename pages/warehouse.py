@@ -124,7 +124,7 @@ def add_warehouse_product():
     try:
         warehouses = get_warehouses()
         
-        if not warehouses:
+        if warehouses.empty:
             st.warning("Belum ada data lumbung. Silakan tambahkan data lumbung terlebih dahulu.")
             return
         
