@@ -122,6 +122,7 @@ def sidebar_nav():
         menu_options = [
             "Dashboard",
             "Manajemen Lumbung", 
+            "Lokasi Lumbung Desa",
             "Manajemen Petani",
             "Manajemen Pedagang",
             "Hasil Panen",
@@ -478,6 +479,10 @@ def inventory_page():
     from pages.warehouse import app
     app()
 
+def warehouse_locations_page():
+    from pages.warehouse_locations import app
+    app()
+
 def farmers_page():
     from pages.farmers import app
     app()
@@ -520,6 +525,8 @@ def main():
             profile_page()
         elif page == "Manajemen Lumbung":
             inventory_page()
+        elif page == "Lokasi Lumbung Desa":
+            warehouse_locations_page()
         elif page == "Manajemen Petani":
             farmers_page()
         elif page == "Manajemen Pedagang":

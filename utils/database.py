@@ -88,15 +88,18 @@ class MongoDBConnection:
             # Warehouses collection indexes
             db.warehouses.create_index([("name", ASCENDING)], unique=True)
             db.warehouses.create_index([("location", ASCENDING)])
+            db.warehouses.create_index([("coordinates", "2dsphere")])  # Geospatial index
             
             # Farmers collection indexes
             db.farmers.create_index([("name", ASCENDING)])
             db.farmers.create_index([("location", ASCENDING)])
+            db.farmers.create_index([("coordinates", "2dsphere")])  # Geospatial index
             
             # Merchants collection indexes
             db.merchants.create_index([("name", ASCENDING)])
             db.merchants.create_index([("location", ASCENDING)])
             db.merchants.create_index([("type", ASCENDING)])
+            db.merchants.create_index([("coordinates", "2dsphere")])  # Geospatial index
             
             # Harvests collection indexes
             db.harvests.create_index([("farmer_id", ASCENDING)])

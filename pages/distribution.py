@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from utils.auth import require_auth
 from utils.database import MongoDBConnection, get_optimal_distribution_routes, get_warehouses, get_merchants
+from utils.distribution_optimizer import DistributionOptimizer
 from datetime import datetime
 from bson import ObjectId
 # import folium
@@ -14,7 +15,7 @@ def app():
     st.title("Pemetaan Distribusi - Jalur Efisien ke Pedagang")
     
     # Tabs for different distribution functions
-    tab1, tab2, tab3 = st.tabs(["Rute Optimal", "Tambah Rute", "Analisis Rute"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Rute Optimal", "Tambah Rute", "Optimasi Canggih", "Analisis Rute"])
     
     with tab1:
         display_optimal_routes()
@@ -23,6 +24,9 @@ def app():
         add_distribution_route()
     
     with tab3:
+        advanced_distribution_optimizer()
+    
+    with tab4:
         route_analysis()
 
 def display_optimal_routes():
@@ -307,3 +311,208 @@ def reoptimize_route(route_id):
             st.error("Gagal mengoptimalkan ulang rute.")
     except Exception as e:
         st.error(f"Error mengoptimalkan ulang rute: {e}")
+
+def advanced_distribution_optimizer():
+    """Advanced distribution optimizer using geospatial algorithms"""
+    st.subheader("🚀 Optimasi Distribusi Canggih dengan Algoritma Geospasial")
+    
+    # Initialize optimizer
+    optimizer = DistributionOptimizer()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("### 📊 Parameter Optimasi")
+        
+        # Get warehouses and merchants data
+        warehouses_df = get_warehouses()
+        merchants_df = get_merchants()
+        
+        if warehouses_df.empty or merchants_df.empty:
+            st.warning("Data lumbung atau pedagang belum tersedia. Pastikan data lokasi sudah lengkap dengan koordinat.")
+            return
+        
+        # Optimization parameters
+        vehicle_capacity = st.number_input("Kapasitas Kendaraan (kg)", 
+                                         min_value=100, max_value=10000, value=1000, step=100)
+        
+        fuel_cost_per_km = st.number_input("Biaya Bahan Bakar per KM (Rp)", 
+                                           min_value=1000, max_value=10000, value=5000, step=500)
+        
+        driver_hourly_rate = st.number_input("Tarif Driver per Jam (Rp)", 
+                                           min_value=10000, max_value=100000, value=25000, step=5000)
+        
+        max_route_time = st.number_input("Waktu Maksimal Perjalanan (jam)", 
+                                         min_value=1, max_value=12, value=8, step=1)
+        
+        optimization_mode = st.selectbox("Mode Optimasi", [
+            "Biaya Minimal", "Waktu Minimal", "Jarak Minimal", "Keseimbangan"
+        ])
+        
+        include_road_conditions = st.checkbox("Pertimbangkan Kondisi Jalan", value=True)
+        
+        optimize_button = st.button("🚀 Optimalkan Rute", use_container_width=True)
+    
+    with col2:
+        st.write("### 📈 Statistik Data")
+        
+        # Display current data statistics
+        st.metric("Jumlah Lumbung", len(warehouses_df))
+        st.metric("Jumlah Pedagang", len(merchants_df))
+        
+        # Check coordinate availability
+        warehouses_with_coords = sum(1 for _, w in warehouses_df.iterrows() 
+                                     if 'coordinates' in w and w['coordinates'])
+        merchants_with_coords = sum(1 for _, m in merchants_df.iterrows() 
+                                   if 'coordinates' in m and m['coordinates'])
+        
+        st.metric("Lumbung dengan Koordinat", f"{warehouses_with_coords}/{len(warehouses_df)}")
+        st.metric("Pedagang dengan Koordinat", f"{merchants_with_coords}/{len(merchants_df)}")
+        
+        if warehouses_with_coords == 0 or merchants_with_coords == 0:
+            st.error("Koordinat diperlukan untuk optimasi geospasial. Pastikan data lokasi sudah lengkap.")
+            return
+    
+    if optimize_button:
+        with st.spinner("🔄 Sedang mengoptimalkan rute distribusi..."):
+            try:
+                # Prepare data for optimization
+                warehouses_data = []
+                for _, warehouse in warehouses_df.iterrows():
+                    if 'coordinates' in warehouse and warehouse['coordinates']:
+                        warehouses_data.append({
+                            'id': str(warehouse['_id']),
+                            'name': warehouse['name'],
+                            'location': warehouse.get('location', ''),
+                            'coordinates': warehouse['coordinates'],
+                            'capacity': warehouse.get('capacity', 1000)
+                        })
+                
+                merchants_data = []
+                for _, merchant in merchants_df.iterrows():
+                    if 'coordinates' in merchant and merchant['coordinates']:
+                        merchants_data.append({
+                            'id': str(merchant['_id']),
+                            'name': merchant['name'],
+                            'location': merchant.get('location', ''),
+                            'coordinates': merchant['coordinates'],
+                            'demand': merchant.get('demand', 100)
+                        })
+                
+                if not warehouses_data or not merchants_data:
+                    st.error("Tidak cukup data dengan koordinat untuk optimasi.")
+                    return
+                
+                # Set optimization parameters
+                optimizer.set_vehicle_capacity(vehicle_capacity)
+                optimizer.set_cost_parameters(fuel_cost_per_km, driver_hourly_rate)
+                optimizer.set_time_constraints(max_route_time * 60)  # Convert to minutes
+                
+                # Choose optimization mode
+                if optimization_mode == "Biaya Minimal":
+                    optimizer.set_optimization_mode("cost")
+                elif optimization_mode == "Waktu Minimal":
+                    optimizer.set_optimization_mode("time")
+                elif optimization_mode == "Jarak Minimal":
+                    optimizer.set_optimization_mode("distance")
+                else:
+                    optimizer.set_optimization_mode("balanced")
+                
+                # Run optimization
+                optimal_routes = optimizer.optimize_distribution_routes(
+                    warehouses_data, merchants_data
+                )
+                
+                if optimal_routes:
+                    st.success("✅ Optimasi selesai!")
+                    
+                    # Display results
+                    display_optimization_results(optimal_routes, optimization_mode)
+                    
+                    # Save optimized routes to database
+                    if st.button("💾 Simpan Rute yang Dihasilkan"):
+                        save_optimized_routes(optimal_routes)
+                        st.success("Rute optimal berhasil disimpan!")
+                
+            except Exception as e:
+                st.error(f"Error saat optimasi: {e}")
+
+def display_optimization_results(optimal_routes, optimization_mode):
+    """Display optimization results"""
+    st.write("### 📊 Hasil Optimasi Rute Distribusi")
+    
+    # Summary statistics
+    total_cost = sum(route['total_cost'] for route in optimal_routes)
+    total_distance = sum(route['total_distance'] for route in optimal_routes)
+    total_time = sum(route['total_time'] for route in optimal_routes)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Jumlah Rute Optimal", len(optimal_routes))
+    
+    with col2:
+        st.metric("Total Biaya", f"Rp {total_cost:,.0f}")
+    
+    with col3:
+        st.metric("Total Jarak", f"{total_distance:.1f} km")
+    
+    with col4:
+        st.metric("Total Waktu", f"{total_time/60:.1f} jam")
+    
+    # Detailed route information
+    st.write("### 🛣️ Detail Rute Optimal")
+    
+    for i, route in enumerate(optimal_routes, 1):
+        with st.expander(f"🚚 Rute {i}: {route['warehouse_name']} → {len(route['stops'])} tujuan"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write(f"**Gudang Asal:** {route['warehouse_name']}")
+                st.write(f"**Biaya Total:** Rp {route['total_cost']:,.0f}")
+                st.write(f"**Jarak Total:** {route['total_distance']:.1f} km")
+                st.write(f"**Waktu Total:** {route['total_time']/60:.1f} jam")
+                st.write(f"**Kapasitas Digunakan:** {route['capacity_used']:.0f} kg")
+            
+            with col2:
+                st.write("**Rute Perjalanan:**")
+                for j, stop in enumerate(route['stops'], 1):
+                    st.write(f"{j}. {stop['merchant_name']} ({stop['distance_from_previous']:.1f} km)")
+            
+            # Map display placeholder
+            st.write("**Peta Rute:**")
+            st.info("Peta interaktif akan ditampilkan di sini")
+
+def save_optimized_routes(optimal_routes):
+    """Save optimized routes to database"""
+    try:
+        db = MongoDBConnection.get_database()
+        
+        for route in optimal_routes:
+            # Create route data
+            route_data = {
+                "route_name": f"Rute Optimal: {route['warehouse_name']}",
+                "from_warehouse_id": ObjectId(route['warehouse_id']),
+                "to_merchant_id": ObjectId(route['stops'][0]['merchant_id']) if route['stops'] else None,
+                "distance": route['total_distance'],
+                "travel_time": route['total_time'],
+                "fuel_cost": route['total_cost'] * 0.4,  # Estimate 40% for fuel
+                "road_condition": "Baik",  # Optimized routes assume good conditions
+                "efficiency_score": route['efficiency_score'],
+                "optimization_mode": route.get('optimization_mode', 'balanced'),
+                "stops": route['stops'],
+                "total_cost": route['total_cost'],
+                "capacity_used": route['capacity_used'],
+                "is_optimized": True,
+                "created_date": datetime.now(),
+                "created_by": ObjectId(st.session_state['user']['id']),
+                "is_active": True
+            }
+            
+            # Insert or update route
+            db.distribution_routes.insert_one(route_data)
+        
+        st.success(f"✅ {len(optimal_routes)} rute optimal berhasil disimpan!")
+        
+    except Exception as e:
+        st.error(f"Error saat menyimpan rute: {e}")
