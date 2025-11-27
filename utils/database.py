@@ -27,10 +27,16 @@ class MongoDBConnection:
         """Get MongoDB client with connection pooling"""
         if cls._client is None:
             try:
-                # Build connection string
+                # Build connection string for MongoDB Atlas or Local MongoDB
                 if MONGODB_SETTINGS['username'] and MONGODB_SETTINGS['password']:
-                    connection_string = f"mongodb://{MONGODB_SETTINGS['username']}:{MONGODB_SETTINGS['password']}@{MONGODB_SETTINGS['host']}:{MONGODB_SETTINGS['port']}/{MONGODB_SETTINGS['auth_source']}"
+                    # MongoDB Atlas connection string format
+                    if 'mongodb.net' in MONGODB_SETTINGS['host']:
+                        connection_string = f"mongodb+srv://{MONGODB_SETTINGS['username']}:{MONGODB_SETTINGS['password']}@{MONGODB_SETTINGS['host']}/{MONGODB_SETTINGS['database']}?retryWrites=true&w=majority"
+                    else:
+                        # Local MongoDB with authentication
+                        connection_string = f"mongodb://{MONGODB_SETTINGS['username']}:{MONGODB_SETTINGS['password']}@{MONGODB_SETTINGS['host']}:{MONGODB_SETTINGS['port']}/{MONGODB_SETTINGS['auth_source']}"
                 else:
+                    # Local MongoDB without authentication
                     connection_string = f"mongodb://{MONGODB_SETTINGS['host']}:{MONGODB_SETTINGS['port']}"
                 
                 # Create client with connection pooling
