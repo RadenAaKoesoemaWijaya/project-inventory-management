@@ -53,7 +53,7 @@ class MongoDBConnection:
                     'serverSelectionTimeoutMS': 10000,  # Increased for cloud
                     'connectTimeoutMS': 15000,          # Increased for cloud
                     'socketTimeoutMS': 20000,          # Increased for cloud operations
-                    'heartbeatFrequencyMS': 10000,      # Monitor connection health
+                    'heartbeatFrequencyMS': 5000,      # Monitor connection health
                     'retryWrites': True,
                     'retryReads': True,
                 }
@@ -64,8 +64,7 @@ class MongoDBConnection:
                         'retryReads': True,
                         'retryWrites': True,
                         'w': 'majority',
-                        'readPreference': 'primary',
-                        'readConcern': {'level': 'majority'}
+                        'readPreference': 'primary'
                     })
                 
                 logger.info(f"Connecting to MongoDB: {MONGODB_SETTINGS['host']}")
