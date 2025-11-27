@@ -1,6 +1,6 @@
 import pymongo
 from pymongo import MongoClient, ASCENDING, DESCENDING
-from pymongo.errors import ConnectionFailure, OperationFailure
+from pymongo.errors import ConnectionFailure, OperationFailure, ServerSelectionTimeoutError
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
@@ -24,41 +24,86 @@ class MongoDBConnection:
     
     @classmethod
     def get_client(cls):
-        """Get MongoDB client with connection pooling"""
+        """Get MongoDB client with connection pooling and enhanced error handling"""
         if cls._client is None:
             try:
                 # Build connection string for MongoDB Atlas or Local MongoDB
                 if MONGODB_SETTINGS['username'] and MONGODB_SETTINGS['password']:
                     # MongoDB Atlas connection string format
                     if 'mongodb.net' in MONGODB_SETTINGS['host']:
-                        connection_string = f"mongodb+srv://{MONGODB_SETTINGS['username']}:{MONGODB_SETTINGS['password']}@{MONGODB_SETTINGS['host']}/{MONGODB_SETTINGS['database']}?retryWrites=true&w=majority"
+                        # URL encode password untuk handle special characters
+                        import urllib.parse
+                        encoded_password = urllib.parse.quote_plus(MONGODB_SETTINGS['password'])
+                        connection_string = f"mongodb+srv://{MONGODB_SETTINGS['username']}:{encoded_password}@{MONGODB_SETTINGS['host']}/{MONGODB_SETTINGS['database']}?retryWrites=true&w=majority&appName=Cluster0"
+                        logger.info("Using MongoDB Atlas connection with SRV")
                     else:
                         # Local MongoDB with authentication
                         connection_string = f"mongodb://{MONGODB_SETTINGS['username']}:{MONGODB_SETTINGS['password']}@{MONGODB_SETTINGS['host']}:{MONGODB_SETTINGS['port']}/{MONGODB_SETTINGS['auth_source']}"
+                        logger.info("Using Local MongoDB with authentication")
                 else:
                     # Local MongoDB without authentication
                     connection_string = f"mongodb://{MONGODB_SETTINGS['host']}:{MONGODB_SETTINGS['port']}"
+                    logger.info("Using Local MongoDB without authentication")
                 
-                # Create client with connection pooling
-                cls._client = MongoClient(
-                    connection_string,
-                    maxPoolSize=MONGODB_SETTINGS['maxPoolSize'],
-                    minPoolSize=MONGODB_SETTINGS['minPoolSize'],
-                    maxIdleTimeMS=MONGODB_SETTINGS['maxIdleTimeMS'],
-                    serverSelectionTimeoutMS=5000,
-                    connectTimeoutMS=10000,
-                    socketTimeoutMS=10000,
-                    retryWrites=True,
-                    retryReads=True
-                )
+                # Enhanced client configuration for better reliability
+                client_options = {
+                    'maxPoolSize': MONGODB_SETTINGS['maxPoolSize'],
+                    'minPoolSize': MONGODB_SETTINGS['minPoolSize'],
+                    'maxIdleTimeMS': MONGODB_SETTINGS['maxIdleTimeMS'],
+                    'serverSelectionTimeoutMS': 10000,  # Increased for cloud
+                    'connectTimeoutMS': 15000,          # Increased for cloud
+                    'socketTimeoutMS': 20000,          # Increased for cloud operations
+                    'heartbeatFrequencyMS': 10000,      # Monitor connection health
+                    'retryWrites': True,
+                    'retryReads': True,
+                }
                 
-                # Test connection
-                cls._client.admin.command('ping')
-                logger.info("MongoDB connection established successfully")
+                # Add Atlas-specific options
+                if 'mongodb.net' in MONGODB_SETTINGS['host']:
+                    client_options.update({
+                        'retryReads': True,
+                        'retryWrites': True,
+                        'w': 'majority',
+                        'readPreference': 'primary',
+                        'readConcern': {'level': 'majority'}
+                    })
+                
+                logger.info(f"Connecting to MongoDB: {MONGODB_SETTINGS['host']}")
+                cls._client = MongoClient(connection_string, **client_options)
+                
+                # Test connection with better error handling
+                try:
+                    # Use ping with timeout
+                    cls._client.admin.command('ping', maxTimeMS=5000)
+                    logger.info("MongoDB connection established successfully")
+                    
+                    # Get server info for debugging
+                    server_info = cls._client.server_info()
+                    logger.info(f"Connected to MongoDB version: {server_info.get('version', 'Unknown')}")
+                    
+                except Exception as ping_error:
+                    logger.error(f"Ping failed: {ping_error}")
+                    cls._client = None
+                    raise ConnectionFailure(f"Connection ping failed: {ping_error}")
+                
+            except ServerSelectionTimeoutError as e:
+                logger.error(f"Server selection timeout: {e}")
+                logger.error("Possible causes: Network issues, wrong host, IP not whitelisted")
+                raise ConnectionFailure(f"Server selection timeout: {e}")
                 
             except ConnectionFailure as e:
-                logger.error(f"Failed to connect to MongoDB: {e}")
+                logger.error(f"Connection failed: {e}")
+                logger.error("Possible causes: Authentication failed, network issues")
                 raise
+                
+            except OperationFailure as e:
+                logger.error(f"Operation failed: {e}")
+                logger.error("Possible causes: Insufficient permissions, database not found")
+                raise
+                
+            except Exception as e:
+                logger.error(f"Unexpected connection error: {type(e).__name__}: {e}")
+                raise ConnectionFailure(f"Unexpected error: {e}")
         
         return cls._client
     
