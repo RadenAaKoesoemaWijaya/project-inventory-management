@@ -105,6 +105,7 @@ def sidebar_nav():
         # Filter menu based on role
         if user['role'] == 'admin':
             menu_options.append("Manajemen Pengguna")
+            menu_options.append("Data Dummy")
         
         selected_page = st.sidebar.selectbox("Pilih Menu", menu_options)
         
@@ -376,7 +377,7 @@ def inventory_page():
     app()
 
 def warehouse_locations_page():
-    from pages.warehouse_locations_new import app
+    from pages.warehouse_locations_simple import app
     app()
 
 def farmers_page():
@@ -461,11 +462,100 @@ def main():
                     st.subheader("Daftar Pengguna")
                     # Convert to DataFrame for better display
                     users_df = pd.DataFrame(users)
-                    st.dataframe(users_df[['username', 'full_name', 'role', 'department', 'is_active']])
-                else:
-                    st.info("Tidak ada pengguna ditemukan")
+        elif page == "Data Dummy":
+            if st.session_state['user']['role'] == 'admin':
+                st.title("🗂️ Manajemen Data Dummy")
+                st.markdown("---")
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    st.markdown("""
+                    <div style='padding: 20px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 10px; border-left: 4px solid #0ea5e9;'>
+                        <h4>📊 Generate Data Dummy</h4>
+                        <p>Buat dataset dummy sebanyak 1000+ record untuk simulasi aplikasi lumbung digital.</p>
+                        <p><strong>Fitur yang akan dibuat:</strong></p>
+                        <ul>
+                            <li>👨‍🌾 300 Data Petani</li>
+                            <li>🏪 150 Data Pedagang</li>
+                            <li>🌾 200 Data Item Lumbung</li>
+                            <li>🌱 100 Data Bibit</li>
+                            <li>🧪 80 Data Pupuk</li>
+                            <li>📈 200 Data Hasil Panen</li>
+                            <li>🔄 500 Data Transaksi</li>
+                            <li>🚚 100 Data Rute Distribusi</li>
+                            <li>🔔 150 Data Notifikasi</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown("### ⚠️ **Perhatian**")
+                    st.warning("""
+                        **Hanya untuk Development & Testing!**
+                        
+                        Data dummy akan:
+                        - Menambah 1000+ record ke database
+                        - Menggantikan data yang ada (jika sama)
+                        - Tidak dapat di-undo dengan mudah
+                    """)
+                    
+                    if st.button("🚀 Generate Data Dummy", type="primary", use_container_width=True):
+                        with st.spinner("🌾 Sedang generate data dummy... Mohon tunggu..."):
+                            try:
+                                from utils.dummy_data_generator import DummyDataGenerator
+                                generator = DummyDataGenerator()
+                                generator.generate_all_data()
+                                st.success("✅ Data dummy berhasil dibuat!")
+                                st.balloons()
+                            except Exception as e:
+                                st.error(f"❌ Gagal membuat data dummy: {str(e)}")
+                    
+                    if st.button("🗑️ Hapus Data Dummy", type="secondary", use_container_width=True):
+                        st.warning("⚠️ Fitur hapus data dummy akan segera tersedia")
+                
+                # Data Statistics
+                st.markdown("---")
+                st.subheader("📈 Statistik Database Saat Ini")
+                
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect("inventory_new.db")
+                    cursor = conn.cursor()
+                    
+                    tables = ['users', 'warehouses', 'items', 'farmers', 'merchants', 'harvests', 
+                             'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications']
+                    
+                    stats_data = []
+                    for table in tables:
+                        try:
+                            cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                            count = cursor.fetchone()[0]
+                            stats_data.append({"Tabel": table.replace("_", " ").title(), "Jumlah Record": f"{count:,}"})
+                        except:
+                            stats_data.append({"Tabel": table.replace("_", " ").title(), "Jumlah Record": "Error"})
+                    
+                    stats_df = pd.DataFrame(stats_data)
+                    st.dataframe(stats_df, use_container_width=True, hide_index=True)
+                    
+                    # Calculate total
+                    try:
+                        total_records = sum([int(row["Jumlah Record"].replace(",", "")) if row["Jumlah Record"].isdigit() or row["Jumlah Record"].replace(",", "").isdigit() else 0 for row in stats_data])
+                        st.markdown(f"### 📊 **Total Records: {total_records:,}**")
+                        
+                        if total_records >= 1000:
+                            st.success("🎯 Target 1000+ record tercapai! Aplikasi siap untuk simulasi.")
+                        else:
+                            st.info(f"📌 Total record saat ini: {total_records}. Generate data dummy untuk mencapai target 1000+ record.")
+                    except:
+                        pass
+                    
+                    conn.close()
+                    
+                except Exception as e:
+                    st.error(f"Gagal mengambil statistik database: {str(e)}")
             else:
-                st.error("Anda tidak memiliki akses ke halaman ini!")
+                st.error("❌ Anda tidak memiliki akses ke halaman ini. Hanya admin yang dapat mengakses.")
 
 if __name__ == "__main__":
     main()

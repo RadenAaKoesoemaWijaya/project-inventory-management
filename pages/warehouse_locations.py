@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
+import json
+import uuid
 from datetime import datetime
-from utils.database import MongoDBConnection
+from utils.sqlite_database import SQLiteDatabase
 from utils.geocoding import get_coordinates_from_address
 
 def add_warehouse_location():
@@ -104,43 +106,35 @@ def add_warehouse_location():
             
             try:
                 # Save to database
-                db = MongoDBConnection.get_database()
+                db = SQLiteDatabase()
+                conn = db._get_connection()
+                cursor = conn.cursor()
                 
                 warehouse_data = {
                     "name": name,
+                    "description": f"Lumbung desa di {location}, {sub_district}",
                     "location": location,
-                    "sub_district": sub_district,
-                    "district": district,
-                    "province": province,
-                    "address": address,
-                    "coordinates": {
-                        "lat": lat,
-                        "lng": lng
-                    },
-                    "coordinate_source": coordinate_source,
                     "capacity": capacity,
-                    "manager_name": manager_name,
-                    "manager_phone": manager_phone,
-                    "current_stock": 0,
-                    "created_at": datetime.now(),
-                    "updated_at": datetime.now()
+                    "coordinates": json.dumps({"lat": lat, "lng": lng})
                 }
                 
-                result = db.warehouses.insert_one(warehouse_data)
+                cursor.execute('''
+                    INSERT INTO warehouses (id, name, description, location, capacity, coordinates)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (str(uuid.uuid4()), warehouse_data['name'], warehouse_data['description'], 
+                      warehouse_data['location'], warehouse_data['capacity'], warehouse_data['coordinates']))
                 
-                if result.inserted_id:
-                    st.success(f"✅ Lokasi lumbung '{name}' berhasil ditambahkan!")
-                    st.info(f"Koordinat: {lat:.6f}, {lng:.6f} (Sumber: {coordinate_source})")
-                    
-                    # Clear session state
-                    if 'extracted_lat' in st.session_state:
-                        del st.session_state.extracted_lat
-                    if 'extracted_lng' in st.session_state:
-                        del st.session_state.extracted_lng
-                    
-                    st.rerun()
-                else:
-                    st.error("Gagal menyimpan data lumbung!")
+                conn.commit()
+                st.success(f"✅ Lokasi lumbung '{name}' berhasil ditambahkan!")
+                st.info(f"Koordinat: {lat:.6f}, {lng:.6f} (Sumber: {coordinate_source})")
+                
+                # Clear session state
+                if 'extracted_lat' in st.session_state:
+                    del st.session_state.extracted_lat
+                if 'extracted_lng' in st.session_state:
+                    del st.session_state.extracted_lng
+                
+                st.rerun()
                     
             except Exception as e:
                 st.error(f"Error saat menyimpan data: {e}")
@@ -149,18 +143,22 @@ def display_warehouse_locations():
     st.subheader("📍 Daftar Lokasi Lumbung Desa")
     
     try:
-        db = MongoDBConnection.get_database()
-        warehouses = list(db.warehouses.find().sort("name", 1))
+        db = SQLiteDatabase()
+        conn = db._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM warehouses ORDER BY name")
+        warehouses = cursor.fetchall()
         
         if not warehouses:
             st.info("Belum ada data lokasi lumbung desa.")
             return
         
         # Convert to DataFrame for better display
-        df = pd.DataFrame(warehouses)
+        df = pd.DataFrame(warehouses, columns=[desc[0] for desc in cursor.description])
         
         # Add coordinate display
-        df['koordinat'] = df.apply(lambda row: f"{row['coordinates']['lat']:.6f}, {row['coordinates']['lng']:.6f}" 
+        df['koordinat'] = df.apply(lambda row: f"{json.loads(row['coordinates'])['lat']:.6f}, {json.loads(row['coordinates'])['lng']:.6f}" 
                                   if 'coordinates' in row and row['coordinates'] 
                                   else "Tidak tersedia", axis=1)
         
