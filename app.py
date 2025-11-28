@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 from datetime import datetime
 from utils.auth_new import login_user, logout_user, get_user_by_id, update_user
 from utils.sqlite_database import get_items_low_stock, get_recent_transactions, init_db, get_warehouse_consumption
@@ -60,9 +61,23 @@ if 'authenticated' not in st.session_state:
 def initialize_database():
     """Initialize SQLite database"""
     try:
-        return init_db()
+        # Check if database file exists and is accessible
+        db_path = "inventory_new.db"
+        if not os.path.exists(db_path):
+            # Create database if it doesn't exist
+            conn = sqlite3.connect(db_path)
+            conn.close()
+        
+        # Initialize database with tables and default data
+        result = init_db()
+        if result:
+            st.success("✅ Database initialized successfully!")
+            return True
+        else:
+            st.error("❌ Failed to initialize database tables")
+            return False
     except Exception as e:
-        st.error(f"Database initialization failed: {e}")
+        st.error(f"Database initialization failed: {str(e)}")
         return False
 
 if 'db_initialized' not in st.session_state:
@@ -414,7 +429,18 @@ def dashboard_page():
 def main():
     # Check if database is initialized
     if not st.session_state.get('db_initialized', False):
-        st.error("Database initialization failed. Please check your database configuration.")
+        st.error("❌ Database initialization failed. Please check your database configuration.")
+        st.info("🔧 Troubleshooting steps:")
+        st.info("1. Ensure 'inventory_new.db' file permissions are correct")
+        st.info("2. Check if SQLite library is properly installed")
+        st.info("3. Verify database file is not corrupted")
+        st.info("4. Restart the application")
+        
+        # Add retry button
+        if st.button("🔄 Retry Database Initialization"):
+            st.session_state['db_initialized'] = initialize_database()
+            if st.session_state['db_initialized']:
+                st.rerun()
         return
     
     if not st.session_state.get('authenticated', False):
