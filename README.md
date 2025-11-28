@@ -33,19 +33,22 @@ Sistem Lumbung Digital adalah aplikasi web yang dirancang khusus untuk mengelola
 
 ## ✨ Fitur Utama
 
-### 🏠 Dashboard Real-time
+### Dashboard Real-time
 - **KPI Dashboard**: Monitoring stok, distribusi, dan kinerja real-time
 - **Visualisasi Data**: Grafik interaktif untuk produksi dan distribusi
 - **Notifikasi**: Alert otomatis untuk stok rendah dan kejadian penting
 - **Ringkasan Cepat**: Overview kondisi lumbung dan status distribusi
 
-### �️ Data Dummy Management *(NEW)*
-- **One-Click Generation**: Generate 1000+ record untuk testing dan demo
+### Data Dummy Management *(NEW)*
+- **One-Click Generation**: Generate 1000+ record untuk testing dan demo (Admin)
+- **Safe Simulation Mode**: Generate 50+ record untuk user biasa bermain simulasi
+- **Role-Based Access**: Admin dapat generate full data, user dapat generate safe data
 - **Realistic Data**: Data dummy yang realistis untuk simulasi pertanian
 - **Admin Only**: Fitur khusus admin untuk development dan testing
 - **Statistics Dashboard**: Live monitoring database statistics
 - **Safe Generation**: Validasi data dan error handling yang robust
 
+### Manajemen Pengguna
 ### � Manajemen Pengguna
 - **Multi-Role System**: Admin, Staff, Manager dengan akses terbatas
 - **Authentication**: Login aman dengan password hashing
@@ -127,7 +130,8 @@ project-inventory-management/
 │   └── forecast_new.py        # Forecasting & prediksi
 ├── utils/                     # Utility functions
 │   ├── sqlite_database.py     # Database operations (SQLite)
-│   ├── dummy_data_generator.py # Data dummy generator *(NEW)*
+│   ├── dummy_data_generator.py # Full data dummy generator (Admin)
+│   ├── dummy_data_generator_safe.py # Safe simulation generator (Users)
 │   ├── auth_new.py           # Authentication system
 │   └── helpers_new.py        # Helper functions
 ├── scripts/                   # Utility scripts
@@ -176,9 +180,10 @@ project-inventory-management/
      - Password: `admin123`
 
 7. **Generate Data Dummy via UI** *(Recommended)*
-   - Login sebagai admin
+   - Login sebagai admin atau user biasa
    - Navigate ke menu "Data Dummy" di sidebar
-   - Klik "🚀 Generate Data Dummy" untuk membuat 1000+ record
+   - **Admin**: Klik "🚀 Generate Data Dummy" untuk membuat 1000+ record
+   - **User**: Klik "🚀 Generate Data Simulasi" untuk membuat 50+ record
    - Monitor progress dan statistik database real-time
 
 ## 👤 Pengguna & Roles
@@ -201,6 +206,7 @@ project-inventory-management/
 - **Inventory Management**: Kelola stok lumbung
 - **Basic Reports**: Laporan operasional
 - **Customer Service**: Layanan ke petani dan pedagang
+- **Simulation Access**: Generate data simulasi untuk training *(NEW)*
 
 ## 📊 Fitur Detail
 
