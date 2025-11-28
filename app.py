@@ -607,8 +607,8 @@ def main():
                     
                 except Exception as e:
                     st.error(f"Gagal mengambil statistik database: {str(e)}")
-            else:
-                st.error("❌ Anda tidak memiliki akses ke halaman ini. Silakan login terlebih dahulu.")
+        else:
+            st.error("❌ Anda tidak memiliki akses ke halaman ini. Silakan login terlebih dahulu.")
 
 if __name__ == "__main__":
     main()
