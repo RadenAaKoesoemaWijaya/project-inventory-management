@@ -1,73 +1,33 @@
 import streamlit as st
 import pandas as pd
-from utils.auth import login_user, logout_user, get_user_by_id, update_user
-from utils.database import MongoDBConnection, get_items_low_stock, get_recent_transactions, init_db, get_warehouse_consumption
-from utils.helpers import get_stock_status, get_department_consumption, get_top_consumed_items
-import os
 from datetime import datetime
-from bson import ObjectId
+from utils.auth_new import login_user, logout_user, get_user_by_id, update_user
+from utils.sqlite_database import get_items_low_stock, get_recent_transactions, init_db, get_warehouse_consumption
+from utils.helpers_new import get_stock_status, get_department_consumption, get_top_consumed_items
+import os
 
-# Initialize MongoDB connection and database
-@st.cache_resource
-def initialize_database():
-    """Initialize database connection and create collections"""
-    try:
-        init_db()
-        return True
-    except Exception as e:
-        st.error(f"Failed to initialize database: {e}")
-        return False
-
-# Set page configuration with agriculture theme
-st.set_page_config(
-    page_title="Lumbung Digital - Manajemen Hasil Pertanian",
-    page_icon="🌾",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': None,
-        'About': "Sistem Lumbung Digital - Manajemen hasil pertanian, forecasting bibit & pupuk, serta distribusi ke pedagang lokal"
-    }
-)
-
-# Custom CSS for agriculture theme
+# Custom CSS for agricultural theme
 st.markdown("""
 <style>
-    /* Agriculture theme colors */
+    /* Agriculture themed colors */
     .stApp {
-        background: linear-gradient(135deg, #f5f9f5 0%, #e8f5e8 100%);
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     }
     
-    /* Custom header */
-    .agri-header {
-        background: linear-gradient(135deg, #4CAF50, #8BC34A, #CDDC39);
+    .stButton>button {
+        background: linear-gradient(45deg, #4CAF50, #8BC34A);
         color: white;
-        padding: 20px;
-        border-radius: 15px;
-        text-align: center;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    
-    /* Agriculture cards */
-    .agri-card {
-        background: white;
-        border-left: 5px solid #4CAF50;
-        border-radius: 10px;
-        padding: 15px;
-        margin: 10px 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    /* Fertilizer themed elements */
-    .fertilizer-badge {
-        background: linear-gradient(45deg, #FF6B35, #F7931E);
-        color: white;
-        padding: 5px 10px;
-        border-radius: 15px;
-        font-size: 0.8em;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 20px;
         font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        background: linear-gradient(45deg, #45a049, #7CB342);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
     
     /* Seed themed elements */
@@ -97,6 +57,14 @@ if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
 # Initialize database
+def initialize_database():
+    """Initialize SQLite database"""
+    try:
+        return init_db()
+    except Exception as e:
+        st.error(f"Database initialization failed: {e}")
+        return False
+
 if 'db_initialized' not in st.session_state:
     with st.spinner("🌾 Sedang mempersiapkan sistem lumbung digital..."):
         st.session_state['db_initialized'] = initialize_database()
@@ -142,7 +110,6 @@ def sidebar_nav():
         
         # Logout button
         if st.sidebar.button("Logout", use_container_width=True):
-            from utils.auth import logout_user
             logout_user()
             st.rerun()
             
@@ -161,7 +128,7 @@ def login_page():
         col1, col2 = st.columns([1, 1])
         
         with col1:
-            # Custom agriculture logo with fertilizer, seeds, and farming elements
+            # Custom agriculture logo
             st.markdown("""
             <div style="text-align: center; background: linear-gradient(135deg, #4CAF50, #8BC34A, #CDDC39); padding: 25px; border-radius: 20px; box-shadow: 0 6px 12px rgba(0,0,0,0.3);">
                 <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 10px;">
@@ -230,7 +197,7 @@ def login_page():
                     st.error("Password dan konfirmasi password tidak cocok!")
                 else:
                     # Register new user
-                    from utils.auth import register_user
+                    from utils.auth_new import register_user
                     success, message = register_user(new_username, new_password, full_name, role, department)
                     
                     if success:
@@ -278,77 +245,6 @@ def login_page():
         """)
         
         st.info("💡 **Tips**: Pastikan untuk selalu logout setelah selesai menggunakan aplikasi untuk menjaga keamanan data!")
-
-# Dashboard page
-def dashboard_page():
-    st.title("Dashboard Sistem Lumbung Digital")
-    
-    # Get stock status
-    stock_status = get_stock_status()
-    
-    # Display KPIs
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Hasil Panen", stock_status['total_items'])
-    
-    with col2:
-        st.metric("Stok Lumbung Sehat", stock_status['healthy_stock'])
-    
-    with col3:
-        st.metric("Stok Lumbung Rendah", stock_status['low_stock'])
-    
-    with col4:
-        st.metric("Stok Lumbung Habis", stock_status['out_of_stock'])
-    
-    # Display low stock items
-    st.subheader("Item dengan Stok Rendah")
-    low_stock_items = get_items_low_stock()
-    
-    if not low_stock_items.empty:
-        # Add progress bar for stock level
-        low_stock_items['stock_percentage'] = (low_stock_items['current_stock'] / low_stock_items['min_stock']) * 100
-        low_stock_items['stock_percentage'] = low_stock_items['stock_percentage'].clip(upper=100)
-        
-        for _, item in low_stock_items.iterrows():
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.write(f"**{item['name']}** ({item['category']})")
-                st.progress(int(item['stock_percentage']))
-                
-            with col2:
-                st.write(f"Stok: **{item['current_stock']}** {item['unit']}")
-                st.write(f"Min: **{item['min_stock']}** {item['unit']}")
-    else:
-        st.info("Tidak ada item dengan stok rendah.")
-    
-    # Recent transactions
-    st.subheader("Transaksi Terbaru")
-    transactions = get_recent_transactions(limit=5)
-    
-    if not transactions.empty:
-        st.dataframe(transactions)
-    else:
-        st.info("Belum ada transaksi.")
-    
-    # Warehouse consumption
-    st.subheader("Distribusi per Lumbung (30 Hari Terakhir)")
-    warehouse_consumption = get_warehouse_consumption()
-    
-    if not warehouse_consumption.empty:
-        st.bar_chart(warehouse_consumption.set_index('warehouse')['total_distribution'])
-    else:
-        st.info("Belum ada data distribusi lumbung.")
-    
-    # Top consumed items
-    st.subheader("Hasil Panen Terbanyak (30 Hari Terakhir)")
-    top_items = get_top_consumed_items(limit=5)
-    
-    if not top_items.empty:
-        st.bar_chart(top_items.set_index('item_name')['total_consumption'])
-    else:
-        st.info("Belum ada data hasil panen.")
 
 # Profile page
 def profile_page():
@@ -405,7 +301,7 @@ def profile_page():
         if submit_profile:
             if new_full_name != current_name or new_department != current_department:
                 try:
-                    # Update user in MongoDB
+                    # Update user in database
                     success = update_user(user_id, {
                         "full_name": new_full_name,
                         "department": new_department
@@ -447,7 +343,7 @@ def profile_page():
                 st.error("Password minimal 6 karakter!")
             else:
                 try:
-                    from utils.auth import verify_password, hash_password
+                    from utils.auth_new import verify_password, hash_password
                     
                     # Get current user from database
                     user_data = get_user_by_id(user_id)
@@ -476,42 +372,47 @@ def profile_page():
 
 # Wrapper functions for page modules
 def inventory_page():
-    from pages.warehouse import app
+    from pages.warehouse_new import app
     app()
 
 def warehouse_locations_page():
-    from pages.warehouse_locations import app
+    from pages.warehouse_locations_new import app
     app()
 
 def farmers_page():
-    from pages.farmers import app
+    from pages.farmers_new import app
     app()
 
 def merchants_page():
-    from pages.merchants import app
+    from pages.merchants_new import app
     app()
 
 def harvests_page():
-    from pages.harvests import app
+    from pages.harvests_new import app
     app()
 
 def distribution_page():
-    from pages.distribution import app
-    app()
-
-def report_page():
-    from pages.report import app
+    from pages.distribution_new import app
     app()
 
 def forecast_page():
-    from pages.forecast import app
+    from pages.forecast_new import app
+    app()
+
+def report_page():
+    from pages.report_new import app
+    app()
+
+# Dashboard using new SQLite version
+def dashboard_page():
+    from pages.dashboard_new import app
     app()
 
 # Main app function
 def main():
     # Check if database is initialized
     if not st.session_state.get('db_initialized', False):
-        st.error("Database initialization failed. Please check your MongoDB connection.")
+        st.error("Database initialization failed. Please check your database configuration.")
         return
     
     if not st.session_state.get('authenticated', False):
@@ -553,13 +454,12 @@ def main():
                 st.write("Fitur manajemen pengguna akan segera tersedia...")
                 
                 # You can add user management functionality here
-                from utils.auth import get_all_users
+                from utils.auth_new import get_all_users
                 
                 users = get_all_users()
                 if users:
                     st.subheader("Daftar Pengguna")
                     # Convert to DataFrame for better display
-                    import pandas as pd
                     users_df = pd.DataFrame(users)
                     st.dataframe(users_df[['username', 'full_name', 'role', 'department', 'is_active']])
                 else:

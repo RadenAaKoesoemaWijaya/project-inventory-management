@@ -4,17 +4,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# MongoDB Configuration
-MONGODB_SETTINGS = {
-    'host': os.getenv('MONGODB_HOST', 'localhost'),
-    'port': int(os.getenv('MONGODB_PORT', 27017)),
-    'database': os.getenv('MONGODB_DATABASE', 'kalkulis_inventory'),
-    'username': os.getenv('MONGODB_USERNAME', ''),
-    'password': os.getenv('MONGODB_PASSWORD', ''),
-    'auth_source': os.getenv('MONGODB_AUTH_SOURCE', 'admin'),
-    'maxPoolSize': int(os.getenv('MONGODB_MAX_POOL_SIZE', 100)),
-    'minPoolSize': int(os.getenv('MONGODB_MIN_POOL_SIZE', 10)),
-    'maxIdleTimeMS': int(os.getenv('MONGODB_MAX_IDLE_TIME', 45000)),
+# SQLite Database Configuration
+SQLITE_SETTINGS = {
+    'database_path': os.getenv('SQLITE_DATABASE_PATH', 'inventory.db'),
+    'backup_enabled': os.getenv('SQLITE_BACKUP_ENABLED', 'true').lower() == 'true',
+    'backup_interval_hours': int(os.getenv('SQLITE_BACKUP_INTERVAL', 24)),
 }
 
 # Application Settings
@@ -29,7 +23,6 @@ APP_SETTINGS = {
 # Real-time Settings
 REALTIME_SETTINGS = {
     'ENABLE_REALTIME': os.getenv('ENABLE_REALTIME', 'true').lower() == 'true',
-    'CHANGE_STREAM_ENABLED': os.getenv('CHANGE_STREAM_ENABLED', 'true').lower() == 'true',
     'NOTIFICATION_ENABLED': os.getenv('NOTIFICATION_ENABLED', 'true').lower() == 'true',
 }
 
