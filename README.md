@@ -6,6 +6,31 @@ Sistem manajemen lumbung digital berbasis web untuk monitoring dan pengelolaan h
 
 Sistem Lumbung Digital adalah aplikasi web yang dirancang khusus untuk mengelola stok hasil pertanian di lumbung-lumbung desa. Aplikasi ini menyediakan solusi komprehensif untuk tracking inventori, manajemen petani dan pedagang, distribusi hasil panen, serta forecasting kebutuhan pertanian.
 
+## 🆕 Update Terbaru (v1.4.0)
+
+### ✨ Fitur Baru
+- **🗂️ Data Dummy Generator**: Generate 1000+ record untuk simulasi dan testing
+- **📍 Enhanced Warehouse Locations**: Improved location management dengan SQLite integration
+- **🛡️ Better Error Handling**: Robust error handling dan user feedback
+- **📊 Real-time Statistics**: Live database statistics dan monitoring
+
+### 🔧 Perbaikan & Optimasi
+- **Database Migration**: Full migration dari MongoDB ke SQLite
+- **Performance Improvement**: Query optimization dan faster loading
+- **UI/UX Enhancements**: Better responsive design dan user experience
+- **Security Updates**: Enhanced authentication dan input validation
+
+### 📈 Data Generation Capabilities
+- **👨‍🌾 300+ Data Petani**: Complete farmer profiles dengan lokasi dan lahan
+- **🏪 150+ Data Pedagang**: Merchant database dengan kategori dan kontak
+- **🌾 200+ Data Items**: Inventory items dengan stok dan pricing
+- **🌱 100+ Data Bibit**: Seed inventory dengan expiry tracking
+- **🧪 80+ Data Pupuk**: Fertilizer management system
+- **📈 200+ Data Hasil Panen**: Harvest records dengan quality grading
+- **🔄 500+ Data Transaksi**: Transaction history dan audit trail
+- **🚚 100+ Data Rute Distribusi**: Distribution route optimization
+- **🔔 150+ Data Notifikasi**: System notifications dan alerts
+
 ## ✨ Fitur Utama
 
 ### 🏠 Dashboard Real-time
@@ -14,7 +39,14 @@ Sistem Lumbung Digital adalah aplikasi web yang dirancang khusus untuk mengelola
 - **Notifikasi**: Alert otomatis untuk stok rendah dan kejadian penting
 - **Ringkasan Cepat**: Overview kondisi lumbung dan status distribusi
 
-### 👥 Manajemen Pengguna
+### �️ Data Dummy Management *(NEW)*
+- **One-Click Generation**: Generate 1000+ record untuk testing dan demo
+- **Realistic Data**: Data dummy yang realistis untuk simulasi pertanian
+- **Admin Only**: Fitur khusus admin untuk development dan testing
+- **Statistics Dashboard**: Live monitoring database statistics
+- **Safe Generation**: Validasi data dan error handling yang robust
+
+### � Manajemen Pengguna
 - **Multi-Role System**: Admin, Staff, Manager dengan akses terbatas
 - **Authentication**: Login aman dengan password hashing
 - **Profile Management**: Update profil dan ganti password
@@ -86,6 +118,7 @@ project-inventory-management/
 ├── pages/                     # Streamlit pages
 │   ├── dashboard_new.py       # Dashboard utama
 │   ├── warehouse_new.py       # Manajemen lumbung
+│   ├── warehouse_locations_simple.py  # Lokasi lumbung (SQLite)
 │   ├── farmers_new.py         # Manajemen petani
 │   ├── merchants_new.py       # Manajemen pedagang
 │   ├── harvests_new.py        # Manajemen hasil panen
@@ -93,7 +126,8 @@ project-inventory-management/
 │   ├── report_new.py          # Laporan & analytics
 │   └── forecast_new.py        # Forecasting & prediksi
 ├── utils/                     # Utility functions
-│   ├── sqlite_database.py     # Database operations
+│   ├── sqlite_database.py     # Database operations (SQLite)
+│   ├── dummy_data_generator.py # Data dummy generator *(NEW)*
 │   ├── auth_new.py           # Authentication system
 │   └── helpers_new.py        # Helper functions
 ├── scripts/                   # Utility scripts
@@ -125,16 +159,27 @@ project-inventory-management/
    python fix_database.py
    ```
 
-4. **Run Application**
+4. **(Optional) Generate Data Dummy untuk Testing**
+   ```bash
+   python utils/dummy_data_generator.py
+   ```
+
+5. **Run Application**
    ```bash
    streamlit run app.py
    ```
 
-5. **Access Application**
+6. **Access Application**
    - Buka browser dan kunjungi `http://localhost:8501`
    - Login dengan akun default:
      - Username: `admin`
      - Password: `admin123`
+
+7. **Generate Data Dummy via UI** *(Recommended)*
+   - Login sebagai admin
+   - Navigate ke menu "Data Dummy" di sidebar
+   - Klik "🚀 Generate Data Dummy" untuk membuat 1000+ record
+   - Monitor progress dan statistik database real-time
 
 ## 👤 Pengguna & Roles
 
@@ -143,6 +188,7 @@ project-inventory-management/
 - **User Management**: Kelola pengguna dan roles
 - **System Configuration**: Konfigurasi sistem
 - **Master Data**: Kelola data master (lumbung, petani, pedagang)
+- **Data Dummy Management**: Generate dan manage data dummy untuk testing *(NEW)*
 
 ### 🟡 Manager
 - **Reports Access**: Akses ke semua laporan
@@ -225,6 +271,9 @@ python test_complete.py
 
 # Integration tests
 python test_integration.py
+
+# Test dummy data generation
+python utils/dummy_data_generator.py
 ```
 
 ### Test Coverage
@@ -234,6 +283,8 @@ python test_integration.py
 - ✅ Business logic
 - ✅ API endpoints
 - ✅ Data validation
+- ✅ Data dummy generation *(NEW)*
+- ✅ SQLite integration *(NEW)*
 
 ## 🔄 Migration dari MongoDB
 
@@ -249,6 +300,12 @@ python test_integration.py
 - ✅ **Better Performance**: Query yang lebih cepat untuk data kecil-menengah
 - ✅ **Easier Backup**: File-based backup yang sederhana
 - ✅ **Offline Capability**: Bisa berjalan tanpa internet
+
+### 🆕 SQLite Integration Features
+- **🗄️ Optimized Schema**: Database structure yang optimal untuk SQLite
+- **🔄 Auto Migration**: Automatic data migration dari MongoDB format
+- **📊 Enhanced Analytics**: Better query performance untuk analytics
+- **🛡️ Data Integrity**: ACID compliance untuk data consistency
 
 ## 📱 User Interface
 
@@ -299,6 +356,13 @@ python test_integration.py
 
 ## 🚀 Roadmap
 
+### Version 1.5 (In Progress)
+- 📊 **Advanced Analytics**: Enhanced analytics capabilities
+- 🔗 **API Integration**: REST API untuk third-party integration
+- 📱 **PWA Support**: Progressive Web App features
+- 🎯 **Goal Setting**: Target dan goal tracking
+- 💬 **Chat Support**: In-app chat support
+
 ### Version 2.0 (Planned)
 - 🌐 **Mobile App**: Native mobile application
 - 🤖 **AI Integration**: Machine learning untuk better forecasting
@@ -306,12 +370,11 @@ python test_integration.py
 - 🔄 **Real-time Sync**: Real-time synchronization
 - 🌍 **Multi-language**: Support untuk multiple languages
 
-### Version 1.5 (In Progress)
-- 📊 **Advanced Analytics**: Enhanced analytics capabilities
-- 🔗 **API Integration**: REST API untuk third-party integration
-- 📱 **PWA Support**: Progressive Web App features
-- 🎯 **Goal Setting**: Target dan goal tracking
-- 💬 **Chat Support**: In-app chat support
+### 🆕 Recent Releases (v1.4.0)
+- ✅ **Data Dummy Generator**: Complete data generation system
+- ✅ **SQLite Migration**: Full database migration
+- ✅ **Enhanced UI**: Better user experience
+- ✅ **Performance Optimization**: Faster loading dan queries
 
 ## 📄 License
 
@@ -341,8 +404,40 @@ Contributions are welcome! Please read our contributing guidelines and submit pu
 
 1. **Install**: `pip install -r requirements_new.txt`
 2. **Setup DB**: `python fix_database.py`
-3. **Run**: `streamlit run app.py`
-4. **Login**: Username: `admin`, Password: `admin123`
-5. **Explore**: Navigasi melalui sidebar menu
+3. **(Optional) Data Dummy**: `python utils/dummy_data_generator.py` atau via UI
+4. **Run**: `streamlit run app.py`
+5. **Login**: Username: `admin`, Password: `admin123`
+6. **Explore**: Navigasi melalui sidebar menu
+7. **Generate Data**: Menu "Data Dummy" → "🚀 Generate Data Dummy"
 
-**🌾 Selamat menggunakan Sistem Lumbung Digital Desa!**
+**🌾 Selamat menggunakan Sistem Lumbung Digital Desa v1.4.0!**
+
+---
+
+## 📊 Version History
+
+### v1.4.0 (Latest) - *(November 2024)*
+- ✨ **Data Dummy Generator**: 1000+ record generation system
+- 🔧 **SQLite Migration**: Complete database migration from MongoDB
+- 📍 **Enhanced Locations**: Improved warehouse location management
+- 🛡️ **Better Security**: Enhanced authentication and validation
+- 📈 **Performance**: Optimized queries and faster loading
+
+### v1.3.0 - *(October 2024)*
+- 📊 **Analytics Dashboard**: Enhanced reporting capabilities
+- 🔄 **Distribution Management**: Improved route optimization
+- 📱 **Mobile Responsive**: Better mobile experience
+
+### v1.2.0 - *(September 2024)*
+- 👥 **Multi-User Support**: Role-based access control
+- 🌾 **Harvest Management**: Complete harvest tracking system
+- 📋 **Inventory Management**: Advanced stock management
+
+### v1.1.0 - *(August 2024)*
+- 🏠 **Dashboard**: Real-time monitoring dashboard
+- 🔐 **Authentication**: Secure login system
+- 📊 **Basic Reports**: Initial reporting features
+
+### v1.0.0 - *(July 2024)*
+- 🚀 **Initial Release**: Basic inventory management system
+- 🗄️ **MongoDB Integration**: Initial database implementation
