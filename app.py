@@ -63,21 +63,39 @@ def initialize_database():
     try:
         # Check if database file exists and is accessible
         db_path = "inventory_new.db"
-        if not os.path.exists(db_path):
-            # Create database if it doesn't exist
+        
+        # Try to create/connect to database
+        try:
             conn = sqlite3.connect(db_path)
             conn.close()
+        except sqlite3.Error as e:
+            st.error(f"❌ Tidak dapat mengakses database file: {str(e)}")
+            return False
         
         # Initialize database with tables and default data
-        result = init_db()
-        if result:
-            st.success("✅ Database initialized successfully!")
-            return True
-        else:
-            st.error("❌ Failed to initialize database tables")
+        try:
+            result = init_db()
+            if result:
+                st.success("✅ Database initialized successfully!")
+                return True
+            else:
+                st.error("❌ Failed to initialize database tables")
+                return False
+        except Exception as db_error:
+            st.error(f"❌ Database initialization error: {str(db_error)}")
+            # Try to get more specific error information
+            if "permission" in str(db_error).lower():
+                st.error("🔐 Permission denied: Check file permissions for database")
+            elif "locked" in str(db_error).lower():
+                st.error("🔒 Database locked: Another process might be using the database")
+            elif "no such table" in str(db_error).lower():
+                st.error("📋 Table creation failed: Database schema issue")
+            else:
+                st.error(f"❓ Unknown database error: {str(db_error)}")
             return False
+            
     except Exception as e:
-        st.error(f"Database initialization failed: {str(e)}")
+        st.error(f"❌ System error during database initialization: {str(e)}")
         return False
 
 if 'db_initialized' not in st.session_state:
@@ -386,6 +404,141 @@ def profile_page():
                         
                 except Exception as e:
                     st.error(f"Gagal mengubah password: {str(e)}")
+    
+    st.markdown("---")
+    
+    # Data Management Section (Settings)
+    st.subheader("🗂️ Manajemen Data & Simulasi")
+    
+    user = st.session_state['user']
+    user_role = user['role']
+    
+    # Create columns for better layout
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("""
+        <div style='padding: 20px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 10px; border-left: 4px solid #0ea5e9;'>
+            <h4>📊 Generate Data Simulasi</h4>
+            <p>Buat dataset simulasi untuk pengalaman aplikasi yang lebih realistis.</p>
+            <p><strong>Data yang akan dibuat:</strong></p>
+            <ul>
+                <li>👨‍🌾 Petani & Pedagang</li>
+                <li>🌾 Item Lumbung & Inventori</li>
+                <li>🌱 Bibit & Pupuk</li>
+                <li>📈 Hasil Panen & Transaksi</li>
+                <li>🚚 Rute Distribusi</li>
+                <li>🔔 Notifikasi Sistem</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        if user_role == 'admin':
+            st.markdown("### ⚠️ **Mode Administrator**")
+            st.warning("""
+                **Full Access Mode**
+                
+                Sebagai admin Anda dapat:
+                - Generate data dummy penuh
+                - Override data yang ada
+                - Access semua fitur testing
+            """)
+        else:
+            st.markdown("### 🎯 **Mode Simulasi**")
+            st.info("""
+                **Safe Simulation Mode**
+                
+                Data simulasi akan:
+                - Menambah data contoh
+                - Tidak menghapus data asli
+                - Aman untuk eksplorasi
+            """)
+        
+        button_text = "🚀 Generate Data Simulasi" if user_role != 'admin' else "🚀 Generate Data Dummy"
+        
+        if st.button(button_text, type="primary", use_container_width=True):
+            with st.spinner("🌾 Sedang generate data simulasi... Mohon tunggu..."):
+                try:
+                    if user_role == 'admin':
+                        from utils.dummy_data_generator import DummyDataGenerator
+                        generator = DummyDataGenerator()
+                        generator.generate_all_data()
+                        st.success("✅ Data dummy berhasil dibuat!")
+                        st.balloons()
+                    else:
+                        from utils.dummy_data_generator_safe import SafeDummyDataGenerator
+                        generator = SafeDummyDataGenerator()
+                        generator.generate_all_safe_data()
+                        st.success("🎉 Data simulasi berhasil dibuat! Selamat menjelajahi fitur aplikasi.")
+                        st.info("💡 Gunakan data ini untuk mencoba semua fitur tanpa khawatir mengubah data asli.")
+                except Exception as e:
+                    st.error(f"❌ Gagal membuat data: {str(e)}")
+        
+        if user_role == 'admin':
+            if st.button("🗑️ Hapus Data Dummy", type="secondary", use_container_width=True):
+                st.warning("⚠️ Fitur hapus data dummy akan segera tersedia")
+        else:
+            st.markdown("---")
+            st.markdown("### 💡 **Tips Simulasi**")
+            st.markdown("""
+            <div style='padding: 10px; background: #f8f9fa; border-radius: 8px; font-size: 0.9em;'>
+                <p>🔍 <strong>Coba fitur:</strong></p>
+                <ul>
+                    <li>Dashboard untuk melihat statistik</li>
+                    <li>Manajemen lumbung dan inventori</li>
+                    <li>Laporan dan analytics</li>
+                    <li>Forecasting dan prediksi</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Data Statistics
+    st.markdown("---")
+    st.subheader("📈 Statistik Database Saat Ini")
+    
+    try:
+        import sqlite3
+        conn = sqlite3.connect("inventory_new.db")
+        cursor = conn.cursor()
+        
+        tables = ['users', 'warehouses', 'items', 'farmers', 'merchants', 'harvests', 
+                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications']
+        
+        stats_data = []
+        for table in tables:
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                count = cursor.fetchone()[0]
+                stats_data.append({"Tabel": table.replace("_", " ").title(), "Jumlah Record": f"{count:,}"})
+            except:
+                stats_data.append({"Tabel": table.replace("_", " ").title(), "Jumlah Record": "Error"})
+        
+        stats_df = pd.DataFrame(stats_data)
+        st.dataframe(stats_df, use_container_width=True, hide_index=True)
+        
+        # Calculate total
+        try:
+            total_records = sum([int(row["Jumlah Record"].replace(",", "")) if row["Jumlah Record"].isdigit() or row["Jumlah Record"].replace(",", "").isdigit() else 0 for row in stats_data])
+            st.markdown(f"### 📊 **Total Records: {total_records:,}**")
+            
+            if total_records >= 1000:
+                if user_role == 'admin':
+                    st.success("🎯 Target 1000+ record tercapai! Sistem siap untuk production.")
+                else:
+                    st.success("🎯 Data simulasi lengkap! Selamat menjelajahi semua fitur aplikasi.")
+            else:
+                if user_role == 'admin':
+                    st.info(f"📌 Total record saat ini: {total_records}. Generate data dummy untuk mencapai target 1000+ record.")
+                else:
+                    st.info(f"📌 Total record saat ini: {total_records}. Generate data simulasi untuk pengalaman yang lebih lengkap.")
+        except:
+            pass
+        
+        conn.close()
+        
+    except Exception as e:
+        st.error(f"Gagal mengambil statistik database: {str(e)}")
 
 # Wrapper functions for page modules
 def inventory_page():
@@ -430,17 +583,76 @@ def main():
     # Check if database is initialized
     if not st.session_state.get('db_initialized', False):
         st.error("❌ Database initialization failed. Please check your database configuration.")
-        st.info("🔧 Troubleshooting steps:")
-        st.info("1. Ensure 'inventory_new.db' file permissions are correct")
-        st.info("2. Check if SQLite library is properly installed")
-        st.info("3. Verify database file is not corrupted")
-        st.info("4. Restart the application")
         
-        # Add retry button
-        if st.button("🔄 Retry Database Initialization"):
-            st.session_state['db_initialized'] = initialize_database()
-            if st.session_state['db_initialized']:
-                st.rerun()
+        # Enhanced troubleshooting section
+        with st.expander("🔧 Troubleshooting Guide", expanded=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Quick Fixes:**")
+                st.info("1. 🔄 Restart the application")
+                st.info("2. 📁 Check file permissions")
+                st.info("3. 💾 Clear database cache")
+                
+                # Quick action buttons
+                if st.button("🔄 Retry Database Initialization", type="primary"):
+                    with st.spinner("🔄 Retrying database initialization..."):
+                        st.session_state['db_initialized'] = initialize_database()
+                        if st.session_state['db_initialized']:
+                            st.success("✅ Database initialized successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Retry failed. Check detailed error messages above.")
+                
+                if st.button("🗑️ Reset Database", type="secondary"):
+                    try:
+                        if os.path.exists("inventory_new.db"):
+                            os.remove("inventory_new.db")
+                            st.success("🗑️ Database file removed. Restarting initialization...")
+                            st.session_state['db_initialized'] = initialize_database()
+                            if st.session_state['db_initialized']:
+                                st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Failed to reset database: {str(e)}")
+            
+            with col2:
+                st.markdown("**Advanced Checks:**")
+                st.code("""
+# Check database file permissions
+ls -la inventory_new.db
+
+# Test SQLite connection
+python -c "import sqlite3; conn = sqlite3.connect('inventory_new.db'); print('Connection OK'); conn.close()"
+
+# Check SQLite version
+python -c "import sqlite3; print('SQLite version:', sqlite3.sqlite_version)"
+                """, language="bash")
+                
+                st.markdown("**Common Issues:**")
+                st.warning("🔐 **Permission Denied**: Run app with appropriate file permissions")
+                st.warning("🔒 **Database Locked**: Close other database connections")
+                st.warning("📋 **Corrupted Database**: Delete and recreate database file")
+        
+        # System information
+        st.markdown("---")
+        st.markdown("**System Information:**")
+        
+        try:
+            import sqlite3
+            st.info(f"📊 SQLite Version: {sqlite3.sqlite_version}")
+        except:
+            st.error("❌ SQLite library not available")
+        
+        st.info(f"📁 Database Path: {os.path.abspath('inventory_new.db')}")
+        st.info(f"📂 Working Directory: {os.getcwd()}")
+        
+        # Check database file
+        if os.path.exists("inventory_new.db"):
+            file_size = os.path.getsize("inventory_new.db")
+            st.info(f"📊 Database File Size: {file_size:,} bytes")
+        else:
+            st.warning("⚠️ Database file does not exist")
+        
         return
     
     if not st.session_state.get('authenticated', False):
