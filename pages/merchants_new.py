@@ -67,11 +67,20 @@ def display_merchants():
             st.metric("Total Pedagang", len(merchants_df))
         
         with col_metrics2:
-            active_merchants = len(merchants_df[merchants_df['is_active'] == 1])
+            # Check if is_active column exists, otherwise count all as active
+            if 'is_active' in merchants_df.columns:
+                active_merchants = len(merchants_df[merchants_df['is_active'] == 1])
+            else:
+                # If no is_active column, assume all are active
+                active_merchants = len(merchants_df)
             st.metric("Pedagang Aktif", active_merchants)
         
         with col_metrics3:
-            unique_locations = merchants_df['location'].nunique()
+            # Check if location column exists
+            if 'location' in merchants_df.columns:
+                unique_locations = merchants_df['location'].nunique()
+            else:
+                unique_locations = 0
             st.metric("Lokasi Unik", unique_locations)
         
         # Display merchants in expandable cards

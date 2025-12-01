@@ -9,6 +9,33 @@ from utils.auth_new import require_auth
 from utils.sqlite_database import get_database
 from utils.helpers_new import get_stock_status, get_department_consumption, get_top_consumed_items
 
+def get_db_connection():
+    """Get database connection safely"""
+    try:
+        db = get_database()
+        conn = db._get_connection()
+        return conn
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        return None
+
+def execute_query(query, params=None):
+    """Execute query safely with error handling"""
+    conn = get_db_connection()
+    if conn is None:
+        return None
+    
+    try:
+        cursor = conn.cursor()
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        return cursor
+    except Exception as e:
+        st.error(f"Query execution error: {e}")
+        return None
+
 def app():
     require_auth()
     
@@ -40,43 +67,44 @@ def app():
     
     with col_stats1:
         # Get recent activity
-        db = get_database()
-        conn = db._get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT COUNT(*) FROM harvests WHERE harvest_date >= date('now', '-7 days')")
-        weekly_harvests = cursor.fetchone()[0]
-        st.metric("Panen Minggu Ini", weekly_harvests)
+        cursor = execute_query("SELECT COUNT(*) FROM harvests WHERE harvest_date >= date('now', '-7 days')")
+        if cursor:
+            weekly_harvests = cursor.fetchone()[0]
+            st.metric("Panen Minggu Ini", weekly_harvests)
+        else:
+            st.metric("Panen Minggu Ini", 0)
     
     with col_stats2:
-        cursor.execute("SELECT COUNT(*) FROM users WHERE is_active = 1")
-        active_users = cursor.fetchone()[0]
-        st.metric("Pengguna Aktif", active_users)
+        cursor = execute_query("SELECT COUNT(*) FROM users WHERE is_active = 1")
+        if cursor:
+            active_users = cursor.fetchone()[0]
+            st.metric("Pengguna Aktif", active_users)
+        else:
+            st.metric("Pengguna Aktif", 0)
     
     with col_stats3:
-        cursor.execute("SELECT COUNT(*) FROM warehouses")
-        total_warehouses = cursor.fetchone()[0]
-        st.metric("Total Lumbung", total_warehouses)
+        cursor = execute_query("SELECT COUNT(*) FROM warehouses")
+        if cursor:
+            total_warehouses = cursor.fetchone()[0]
+            st.metric("Total Lumbung", total_warehouses)
+        else:
+            st.metric("Total Lumbung", 0)
     
-    conn.close()
+    # Don't close connection here, let the database class manage it
     
     # Stock distribution by warehouse
     st.markdown("---")
     st.header("🏪 Distribusi Stok per Lumbung")
     
-    try:
-        db = get_database()
-        conn = db._get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT w.name, COUNT(i.id) as item_count, SUM(i.current_stock) as total_stock
-            FROM warehouses w
-            LEFT JOIN items i ON w.id = i.warehouse_id
-            GROUP BY w.id, w.name
-            ORDER BY total_stock DESC
-        ''')
-        
+    cursor = execute_query('''
+        SELECT w.name, COUNT(i.id) as item_count, SUM(i.current_stock) as total_stock
+        FROM warehouses w
+        LEFT JOIN items i ON w.id = i.warehouse_id
+        GROUP BY w.id, w.name
+        ORDER BY total_stock DESC
+    ''')
+    
+    if cursor:
         warehouse_data = cursor.fetchall()
         
         if warehouse_data:
@@ -98,11 +126,8 @@ def app():
             st.dataframe(warehouse_df, use_container_width=True)
         else:
             st.info("Belum ada data stok di lumbung")
-        
-        conn.close()
-        
-    except Exception as e:
-        st.error(f"Error loading warehouse data: {e}")
+    else:
+        st.error("Tidak dapat memuat data distribusi stok")
     
     # Recent harvests
     st.markdown("---")

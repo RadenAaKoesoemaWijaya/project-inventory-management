@@ -103,6 +103,7 @@ class SQLiteDatabase:
                 location TEXT,
                 coordinates TEXT,  -- JSON string for lat/lng
                 phone TEXT,
+                is_active BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -213,6 +214,13 @@ class SQLiteDatabase:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_item ON inventory_transactions(item_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON inventory_transactions(transaction_date)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)')
+        
+        # Add is_active column to merchants table if it doesn't exist (for backward compatibility)
+        try:
+            cursor.execute("ALTER TABLE merchants ADD COLUMN is_active BOOLEAN DEFAULT 1")
+        except sqlite3.OperationalError:
+            # Column already exists, ignore error
+            pass
         
         conn.commit()
         logger.info("Database tables initialized successfully")
@@ -653,7 +661,8 @@ def get_merchants(merchant_type=None, location=None, limit=50):
         conn = db._get_connection()
         cursor = conn.cursor()
         
-        query = "SELECT * FROM merchants"
+        # Explicitly select all columns and ensure is_active is included
+        query = "SELECT id, name, type, location, coordinates, phone, COALESCE(is_active, 1) as is_active, created_at FROM merchants"
         params = []
         
         conditions = []
