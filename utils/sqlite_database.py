@@ -7,6 +7,8 @@ import os
 import uuid
 from typing import Dict, List, Optional, Any
 import bcrypt
+import logging
+from utils.caching import cached
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -254,6 +256,13 @@ class SQLiteDatabase:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_item ON inventory_transactions(item_id)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON inventory_transactions(transaction_date)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)')
+        
+        # Performance Optimization Indexes
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_harvests_date ON harvests(harvest_date)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_distributions_date ON distributions(delivery_date)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_distributions_status ON distributions(status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_farmers_location ON farmers(location)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_merchants_location ON merchants(location)')
         
         # Migration: Add missing columns to existing tables for backward compatibility
         # Farmers table migrations
@@ -689,6 +698,7 @@ def get_top_consumed_items(limit=5, days=30):
         return pd.DataFrame()
 
 # Warehouse functions
+@cached(ttl_hours=24)
 def get_warehouses(limit=50):
     """Get warehouses"""
     try:
@@ -706,6 +716,7 @@ def get_warehouses(limit=50):
         return []
 
 # Agricultural functions
+@cached(ttl_hours=1)
 def get_farmers(location=None, limit=50):
     """Get farmers list with optional location filter"""
     try:
@@ -729,6 +740,7 @@ def get_farmers(location=None, limit=50):
         logger.error(f"Error getting farmers: {e}")
         return pd.DataFrame()
 
+@cached(ttl_hours=1)
 def get_merchants(merchant_type=None, location=None, limit=50):
     """Get merchants list with optional filters"""
     try:
@@ -1106,6 +1118,103 @@ def delete_farmer(farmer_id):
             
     except Exception as e:
         logger.error(f"Error deleting farmer {farmer_id}: {e}")
+        return False
+
+# Distribution functions
+def get_distributions(limit=50, status=None, warehouse_id=None, merchant_id=None):
+    """Get distributions data from database"""
+    try:
+        db = get_database()
+        conn = db._get_connection()
+        cursor = conn.cursor()
+        
+        query = '''
+            SELECT d.*, m.name as merchant_name, m.location as merchant_location,
+                   w.name as warehouse_name, w.location as warehouse_location
+            FROM distributions d
+            LEFT JOIN merchants m ON d.merchant_id = m.id
+            LEFT JOIN warehouses w ON d.warehouse_id = w.id
+            WHERE 1=1
+        '''
+        params = []
+        
+        if status:
+            query += " AND d.status = ?"
+            params.append(status)
+        
+        if warehouse_id:
+            query += " AND d.warehouse_id = ?"
+            params.append(warehouse_id)
+        
+        if merchant_id:
+            query += " AND d.merchant_id = ?"
+            params.append(merchant_id)
+        
+        query += " ORDER BY d.delivery_date DESC LIMIT ?"
+        params.append(limit)
+        
+        cursor.execute(query, params)
+        distributions = cursor.fetchall()
+        
+        # Convert to DataFrame
+        df = pd.DataFrame([dict(distribution) for distribution in distributions])
+        return df
+        
+    except Exception as e:
+        logger.error(f"Error getting distributions: {e}")
+        return pd.DataFrame()
+
+def create_distribution(merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit, 
+                       priority="Normal", delivery_method="Truck", estimated_distance=5.0, 
+                       estimated_cost=50000, notes=None):
+    """Create a new distribution"""
+    try:
+        db = get_database()
+        conn = db._get_connection()
+        cursor = conn.cursor()
+        
+        distribution_id = str(uuid.uuid4())
+        
+        cursor.execute('''
+            INSERT INTO distributions (id, merchant_id, warehouse_id, delivery_date, crop_type, 
+                                    quantity, unit, priority, delivery_method, estimated_distance, 
+                                    estimated_cost, notes, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+        ''', (distribution_id, merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit,
+              priority, delivery_method, estimated_distance, estimated_cost, notes))
+        
+        conn.commit()
+        logger.info(f"Distribution {distribution_id} created successfully")
+        return True, f"Distribusi berhasil ditambahkan dengan ID: {distribution_id}"
+        
+    except Exception as e:
+        logger.error(f"Error creating distribution: {e}")
+        return False, f"Error: {str(e)}"
+
+def update_distribution_status(distribution_id, new_status="Completed"):
+    """Update distribution status"""
+    try:
+        db = get_database()
+        conn = db._get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE distributions 
+            SET status = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        ''', (new_status, distribution_id))
+        
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            logger.info(f"Distribution {distribution_id} status updated to {new_status}")
+            return True
+        else:
+            logger.warning(f"Distribution {distribution_id} not found")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error updating distribution status: {e}")
         return False
 
 # Merchant functions

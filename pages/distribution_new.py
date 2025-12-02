@@ -8,7 +8,10 @@ from utils.sqlite_database import (
     get_merchants,
     get_warehouses,
     get_harvests,
-    get_database
+    get_database,
+    get_distributions,
+    create_distribution,
+    update_distribution_status
 )
 import uuid
 import logging
@@ -247,11 +250,104 @@ def route_mapping():
     distributions_df = get_distributions(status="In Progress")
     
     if not distributions_df.empty:
-        st.info("📍 Fitur peta akan segera tersedia. Saat ini menampilkan data rute dalam bentuk tabel.")
+        # Optimization Options
+        st.subheader("🎯 Opsi Optimalisasi Rute")
         
-        # Route summary
-        st.subheader("🚚 Ringkasan Rute Distribusi")
+        col_opt1, col_opt2, col_opt3 = st.columns(3)
         
+        with col_opt1:
+            optimization_method = st.selectbox("Metode Optimalisasi", [
+                "Distance (2-opt)",
+                "VRP (OR-Tools)",
+                "Simple TSP"
+            ])
+            
+        with col_opt2:
+            num_vehicles = st.number_input("Jumlah Kendaraan", min_value=1, max_value=10, value=1)
+            
+        with col_opt3:
+            vehicle_capacity = st.number_input("Kapasitas per Kendaraan (kg)", min_value=100, max_value=10000, value=1000)
+            
+        if st.button("� Optimalkan Rute", use_container_width=True):
+            with st.spinner("Mengoptimalkan rute..."):
+                # Prepare data for optimizer
+                destinations = []
+                for _, row in distributions_df.iterrows():
+                    if row.get('merchant_location'):
+                        try:
+                            lat, lng = map(float, row['merchant_location'].split(','))
+                            destinations.append({
+                                'id': row['id'],
+                                'merchant_name': row['merchant_name'],
+                                'coordinates': {'lat': lat, 'lng': lng},
+                                'weight_kg': row['quantity']
+                            })
+                        except:
+                            continue
+                
+                # Get warehouse location (assuming first one for now or from filter)
+                # Ideally should be selected
+                warehouse_coord = (-7.250445, 112.768845) # Default Surabaya
+                if not distributions_df.empty and distributions_df.iloc[0].get('warehouse_location'):
+                    try:
+                        w_lat, w_lng = map(float, distributions_df.iloc[0]['warehouse_location'].split(','))
+                        warehouse_coord = (w_lat, w_lng)
+                    except:
+                        pass
+                
+                # Run optimization
+                optimizer = DistributionOptimizer()
+                
+                opt_type_map = {
+                    "Distance (2-opt)": "distance",
+                    "VRP (OR-Tools)": "vrp",
+                    "Simple TSP": "simple"
+                }
+                
+                result = optimizer.optimize_delivery_route(
+                    destinations, 
+                    warehouse_coord, 
+                    optimization_type=opt_type_map[optimization_method],
+                    num_vehicles=num_vehicles,
+                    vehicle_capacity=vehicle_capacity
+                )
+                
+                if result.get('error'):
+                    st.error(f"❌ Error: {result['error']}")
+                else:
+                    st.success("✅ Rute berhasil dioptimalkan!")
+                    
+                    # Display results
+                    col_res1, col_res2 = st.columns(2)
+                    
+                    with col_res1:
+                        st.metric("Total Jarak", f"{result['cost']['total_distance_km']} km")
+                        st.metric("Total Biaya", f"Rp {result['cost']['total_cost_rp']:,.0f}")
+                    
+                    with col_res2:
+                        st.metric("Efisiensi", f"{result['efficiency']} kg/km")
+                        st.metric("Biaya per kg", f"Rp {result['cost']['cost_per_kg']:,.0f}")
+                    
+                    # Display routes
+                    if 'routes' in result:
+                        st.subheader("🚚 Detail Rute per Kendaraan")
+                        for route in result['routes']:
+                            with st.expander(f"Kendaraan {route['vehicle_id']} (Muatan: {route['load_kg']} kg, Jarak: {route['distance_km']:.1f} km)"):
+                                st.write(f"**Total Muatan:** {route['load_kg']} kg")
+                                st.write(f"**Jarak Tempuh:** {route['distance_km']:.1f} km")
+                                st.write("**Urutan Pengiriman:**")
+                                for idx, stop in enumerate(route['route']):
+                                    st.write(f"{idx+1}. {stop['merchant_name']} ({stop['weight_kg']} kg)")
+                    else:
+                        st.subheader("🚚 Urutan Pengiriman")
+                        for idx, stop in enumerate(result['route']):
+                            st.write(f"{idx+1}. {stop['merchant_name']} ({stop['weight_kg']} kg)")
+                            
+                    # Map visualization (Placeholder)
+                    st.info("📍 Peta rute akan ditampilkan di sini (menggunakan Folium/Plotly Map)")
+        
+        # Route summary table
+        st.subheader("📊 Ringkasan Data Distribusi")
         route_summary = distributions_df.groupby(['warehouse_name', 'merchant_name']).agg({
             'quantity': 'sum',
             'distance': 'mean',
@@ -260,24 +356,6 @@ def route_mapping():
         
         route_summary.columns = ['Total Jumlah (kg)', 'Rata-rata Jarak (km)', 'Total Biaya (Rp)']
         st.dataframe(route_summary, use_container_width=True)
-        
-        # Distance distribution
-        st.subheader("📏 Distribusi Jarak")
-        
-        distance_ranges = pd.cut(distributions_df['distance'], 
-                                bins=[0, 5, 10, 20, 50], 
-                                labels=['<5 km', '5-10 km', '10-20 km', '>20 km'])
-        distance_counts = distance_ranges.value_counts()
-        
-        fig = px.bar(
-            x=distance_counts.index,
-            y=distance_counts.values,
-            title="Distribusi Jarak Pengiriman",
-            color=distance_counts.values,
-            color_continuous_scale='Blues'
-        )
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
         
     else:
         st.info("📭 Tidak ada distribusi aktif untuk dipetakan.")
@@ -395,101 +473,8 @@ def distribution_analysis():
     else:
         st.info("📭 Tidak ada data distribusi untuk analisis.")
 
-def get_distributions(limit=50, status=None, warehouse_id=None, merchant_id=None):
-    """Get distributions data from database"""
-    try:
-        db = get_database()
-        conn = db._get_connection()
-        cursor = conn.cursor()
-        
-        query = '''
-            SELECT d.*, m.name as merchant_name, m.location as merchant_location,
-                   w.name as warehouse_name, w.location as warehouse_location
-            FROM distributions d
-            LEFT JOIN merchants m ON d.merchant_id = m.id
-            LEFT JOIN warehouses w ON d.warehouse_id = w.id
-            WHERE 1=1
-        '''
-        params = []
-        
-        if status:
-            query += " AND d.status = ?"
-            params.append(status)
-        
-        if warehouse_id:
-            query += " AND d.warehouse_id = ?"
-            params.append(warehouse_id)
-        
-        if merchant_id:
-            query += " AND d.merchant_id = ?"
-            params.append(merchant_id)
-        
-        query += " ORDER BY d.delivery_date DESC LIMIT ?"
-        params.append(limit)
-        
-        cursor.execute(query, params)
-        distributions = cursor.fetchall()
-        
-        # Convert to DataFrame
-        df = pd.DataFrame([dict(distribution) for distribution in distributions])
-        return df
-        
-    except Exception as e:
-        logger.error(f"Error getting distributions: {e}")
-        return pd.DataFrame()
 
-def create_distribution(merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit, 
-                       priority="Normal", delivery_method="Truck", estimated_distance=5.0, 
-                       estimated_cost=50000, notes=None):
-    """Create a new distribution"""
-    try:
-        db = get_database()
-        conn = db._get_connection()
-        cursor = conn.cursor()
-        
-        distribution_id = str(uuid.uuid4())
-        
-        cursor.execute('''
-            INSERT INTO distributions (id, merchant_id, warehouse_id, delivery_date, crop_type, 
-                                    quantity, unit, priority, delivery_method, estimated_distance, 
-                                    estimated_cost, notes, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
-        ''', (distribution_id, merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit,
-              priority, delivery_method, estimated_distance, estimated_cost, notes))
-        
-        conn.commit()
-        logger.info(f"Distribution {distribution_id} created successfully")
-        return True, f"Distribusi berhasil ditambahkan dengan ID: {distribution_id}"
-        
-    except Exception as e:
-        logger.error(f"Error creating distribution: {e}")
-        return False, f"Error: {str(e)}"
 
-def update_distribution_status(distribution_id, new_status="Completed"):
-    """Update distribution status"""
-    try:
-        db = get_database()
-        conn = db._get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE distributions 
-            SET status = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE id = ?
-        ''', (new_status, distribution_id))
-        
-        conn.commit()
-        
-        if cursor.rowcount > 0:
-            logger.info(f"Distribution {distribution_id} status updated to {new_status}")
-            return True
-        else:
-            logger.warning(f"Distribution {distribution_id} not found")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error updating distribution status: {e}")
-        return False
 
 def get_status_emoji(status):
     """Get emoji for distribution status"""
