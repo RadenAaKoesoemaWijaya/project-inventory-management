@@ -3,37 +3,47 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
-from utils.database import MongoDBConnection
+from utils.sqlite_database import get_database
 from typing import Dict, List, Optional
 import numpy as np
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class InventoryAnalytics:
     def __init__(self):
-        self.db = MongoDBConnection.get_database()
+        self.db = get_database()
     
     def get_inventory_turnover(self, days: int = 30) -> Dict:
         """Calculate inventory turnover rate"""
         try:
-            items_collection = self.db['items']
-            transactions_collection = self.db['inventory_transactions']
+            conn = self.db._get_connection()
+            cursor = conn.cursor()
             
-            start_date = datetime.now() - timedelta(days=days)
+            start_date = (datetime.now() - timedelta(days=days)).isoformat()
             
             # Get all items
-            items = list(items_collection.find({}))
+            cursor.execute("SELECT * FROM items")
+            items = [dict(row) for row in cursor.fetchall()]
             
             turnover_data = []
             
             for item in items:
-                # Get consumption data
-                consumption_data = list(transactions_collection.find({
-                    'item_id': item['_id'],
-                    'transaction_type': 'issue',
-                    'transaction_date': {'$gte': start_date}
-                }))
+                # Get consumption data (outbound transactions)
+                cursor.execute("""
+                    SELECT SUM(quantity) as total_consumed
+                    FROM inventory_transactions
+                    WHERE item_id = ? 
+                    AND transaction_type = 'out'
+                    AND transaction_date >= ?
+                """, (item['id'], start_date))
                 
-                total_consumed = sum(t['quantity'] for t in consumption_data)
-                avg_stock = (item['current_stock'] + item.get('opening_stock', item['current_stock'])) / 2
+                result = cursor.fetchone()
+                total_consumed = result['total_consumed'] if result and result['total_consumed'] else 0
+                
+                current_stock = item.get('current_stock', 0) or 0
+                avg_stock = current_stock  # Simplified - would need opening stock for accurate calculation
                 
                 # Calculate turnover rate
                 if avg_stock > 0:
@@ -43,11 +53,11 @@ class InventoryAnalytics:
                 
                 turnover_data.append({
                     'item_name': item['name'],
-                    'category': item['category'],
+                    'category': item.get('category', 'N/A'),
                     'turnover_rate': turnover_rate,
                     'total_consumed': total_consumed,
                     'avg_stock': avg_stock,
-                    'current_stock': item['current_stock']
+                    'current_stock': current_stock
                 })
             
             return {
@@ -57,28 +67,31 @@ class InventoryAnalytics:
             }
             
         except Exception as e:
-            print(f"Error calculating turnover: {e}")
+            logger.error(f"Error calculating turnover: {e}")
             return {'turnover_data': [], 'avg_turnover': 0, 'total_items': 0}
     
     def get_stock_movement_analysis(self, days: int = 30) -> Dict:
         """Analyze stock movement patterns"""
         try:
-            transactions_collection = self.db['inventory_transactions']
-            items_collection = self.db['items']
+            conn = self.db._get_connection()
+            cursor = conn.cursor()
             
-            start_date = datetime.now() - timedelta(days=days)
+            start_date = (datetime.now() - timedelta(days=days)).isoformat()
             
             # Get all transactions in the period
-            transactions = list(transactions_collection.find({
-                'transaction_date': {'$gte': start_date}
-            }))
+            cursor.execute("""
+                SELECT * FROM inventory_transactions
+                WHERE transaction_date >= ?
+            """, (start_date,))
+            
+            transactions = [dict(row) for row in cursor.fetchall()]
             
             # Group by transaction type
             movement_summary = {}
             
             for transaction in transactions:
-                transaction_type = transaction['transaction_type']
-                quantity = transaction['quantity']
+                transaction_type = transaction.get('transaction_type', 'unknown')
+                quantity = transaction.get('quantity', 0) or 0
                 
                 if transaction_type not in movement_summary:
                     movement_summary[transaction_type] = {
@@ -99,9 +112,18 @@ class InventoryAnalytics:
             # Daily movement trend
             daily_movement = {}
             for transaction in transactions:
-                date_str = transaction['transaction_date'].strftime('%Y-%m-%d')
-                trans_type = transaction['transaction_type']
-                quantity = transaction['quantity']
+                transaction_date = transaction.get('transaction_date', '')
+                if isinstance(transaction_date, str):
+                    try:
+                        date_obj = datetime.fromisoformat(transaction_date)
+                        date_str = date_obj.strftime('%Y-%m-%d')
+                    except:
+                        date_str = transaction_date[:10] if len(transaction_date) >= 10 else transaction_date
+                else:
+                    date_str = str(transaction_date)
+                
+                trans_type = transaction.get('transaction_type', 'unknown')
+                quantity = transaction.get('quantity', 0) or 0
                 
                 if date_str not in daily_movement:
                     daily_movement[date_str] = {}
@@ -118,68 +140,18 @@ class InventoryAnalytics:
             }
             
         except Exception as e:
-            print(f"Error analyzing stock movement: {e}")
+            logger.error(f"Error analyzing stock movement: {e}")
             return {'movement_summary': {}, 'daily_movement': {}, 'total_transactions': 0}
-    
-    def get_department_efficiency_analysis(self, days: int = 30) -> Dict:
-        """Analyze department consumption efficiency"""
-        try:
-            departments_collection = self.db['departments']
-            transactions_collection = self.db['inventory_transactions']
-            
-            start_date = datetime.now() - timedelta(days=days)
-            
-            # Get all departments
-            departments = list(departments_collection.find({}))
-            
-            department_analysis = {}
-            
-            for dept in departments:
-                # Get department transactions
-                dept_transactions = list(transactions_collection.find({
-                    'department_id': dept['_id'],
-                    'transaction_date': {'$gte': start_date}
-                }))
-                
-                if dept_transactions:
-                    # Calculate metrics
-                    total_consumed = sum(t['quantity'] for t in dept_transactions if t['transaction_type'] == 'issue')
-                    total_received = sum(t['quantity'] for t in dept_transactions if t['transaction_type'] == 'receipt')
-                    
-                    # Calculate efficiency (consumed vs received ratio)
-                    if total_received > 0:
-                        efficiency_ratio = total_consumed / total_received
-                    else:
-                        efficiency_ratio = 0
-                    
-                    # Calculate daily average consumption
-                    daily_avg = total_consumed / days
-                    
-                    department_analysis[dept['name']] = {
-                        'total_consumed': total_consumed,
-                        'total_received': total_received,
-                        'efficiency_ratio': efficiency_ratio,
-                        'daily_avg_consumption': daily_avg,
-                        'transaction_count': len(dept_transactions)
-                    }
-            
-            return {
-                'department_analysis': department_analysis,
-                'avg_efficiency': np.mean([d['efficiency_ratio'] for d in department_analysis.values()]) if department_analysis else 0
-            }
-            
-        except Exception as e:
-            print(f"Error analyzing department efficiency: {e}")
-            return {'department_analysis': {}, 'avg_efficiency': 0}
     
     def get_inventory_health_score(self) -> Dict:
         """Calculate overall inventory health score"""
         try:
-            items_collection = self.db['items']
-            transactions_collection = self.db['inventory_transactions']
+            conn = self.db._get_connection()
+            cursor = conn.cursor()
             
             # Get all items
-            items = list(items_collection.find({}))
+            cursor.execute("SELECT * FROM items")
+            items = [dict(row) for row in cursor.fetchall()]
             total_items = len(items)
             
             if total_items == 0:
@@ -189,11 +161,14 @@ class InventoryAnalytics:
             factors = {}
             
             # 1. Stock availability factor
-            in_stock_items = len([item for item in items if item['current_stock'] > 0])
+            in_stock_items = len([item for item in items if (item.get('current_stock', 0) or 0) > 0])
             factors['stock_availability'] = (in_stock_items / total_items) * 100
             
             # 2. Stock level factor (items with adequate stock)
-            adequate_stock_items = len([item for item in items if item['current_stock'] > item['min_stock']])
+            adequate_stock_items = len([
+                item for item in items 
+                if (item.get('current_stock', 0) or 0) > (item.get('min_stock', 0) or 0)
+            ])
             factors['stock_adequacy'] = (adequate_stock_items / total_items) * 100
             
             # 3. Turnover factor
@@ -203,15 +178,20 @@ class InventoryAnalytics:
             if avg_turnover >= 4 and avg_turnover <= 6:
                 factors['turnover'] = 100
             elif avg_turnover < 4:
-                factors['turnover'] = (avg_turnover / 4) * 100
+                factors['turnover'] = (avg_turnover / 4) * 100 if avg_turnover > 0 else 0
             else:
                 factors['turnover'] = max(0, 100 - ((avg_turnover - 6) * 10))
             
             # 4. Movement factor (recent activity)
-            thirty_days_ago = datetime.now() - timedelta(days=30)
-            recent_transactions = transactions_collection.count_documents({
-                'transaction_date': {'$gte': thirty_days_ago}
-            })
+            thirty_days_ago = (datetime.now() - timedelta(days=30)).isoformat()
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM inventory_transactions
+                WHERE transaction_date >= ?
+            """, (thirty_days_ago,))
+            
+            result = cursor.fetchone()
+            recent_transactions = result['count'] if result else 0
             
             # Assume 30 transactions per month is good
             factors['movement'] = min(100, (recent_transactions / 30) * 100)
@@ -233,7 +213,7 @@ class InventoryAnalytics:
             }
             
         except Exception as e:
-            print(f"Error calculating health score: {e}")
+            logger.error(f"Error calculating health score: {e}")
             return {'score': 0, 'factors': {}, 'total_items': 0}
     
     def display_analytics_dashboard(self):
@@ -249,12 +229,10 @@ class InventoryAnalytics:
             st.write("")  # Spacer
         
         # Create tabs for different analytics
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3 = st.tabs([
             "Ringkasan Kesehatan",
             "Perputaran Inventory", 
-            "Analisis Pergerakan",
-            "Efisiensi Departemen",
-            "Tren & Prediksi"
+            "Analisis Pergerakan"
         ])
         
         with tab1:
@@ -265,12 +243,6 @@ class InventoryAnalytics:
         
         with tab3:
             self.display_movement_analysis(days_range)
-        
-        with tab4:
-            self.display_department_efficiency(days_range)
-        
-        with tab5:
-            self.display_trends_and_predictions(days_range)
     
     def display_health_summary(self):
         """Display inventory health summary"""
@@ -326,26 +298,29 @@ class InventoryAnalytics:
             df = pd.DataFrame(turnover_data['turnover_data'])
             
             # Display summary
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             
             with col1:
                 st.metric("Rata-rata Perputaran", f"{turnover_data['avg_turnover']:.1f}x/tahun")
             
             with col2:
                 high_turnover = len([d for d in turnover_data['turnover_data'] if d['turnover_rate'] > 6])
-                low_turnover = len([d for d in turnover_data['turnover_data'] if d['turnover_rate'] < 2])
                 st.metric("Item dengan Perputaran Tinggi", high_turnover)
+            
+            with col3:
+                low_turnover = len([d for d in turnover_data['turnover_data'] if d['turnover_rate'] < 2])
                 st.metric("Item dengan Perputaran Rendah", low_turnover)
             
             # Display top items by turnover
             st.subheader("Item dengan Perputaran Tertinggi")
             top_turnover = df.nlargest(10, 'turnover_rate')[['item_name', 'category', 'turnover_rate']]
-            st.dataframe(top_turnover)
+            st.dataframe(top_turnover, use_container_width=True)
             
             # Turnover distribution chart
             fig = px.histogram(df, x='turnover_rate', nbins=20, 
-                             title='Distribusi Tingkat Perputaran')
-            st.plotly_chart(fig)
+                             title='Distribusi Tingkat Perputaran',
+                             color_discrete_sequence=px.colors.sequential.Blues)
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Tidak cukup data untuk analisis perputaran")
     
@@ -358,17 +333,14 @@ class InventoryAnalytics:
         if movement_data['movement_summary']:
             # Display summary
             st.write("**Ringkasan Transaksi:**")
-            for trans_type, summary in movement_data['movement_summary'].items():
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric(f"{trans_type.title()} - Transaksi", summary['total_transactions'])
-                
-                with col2:
-                    st.metric(f"{trans_type.title()} - Total Kuantitas", summary['total_quantity'])
-                
-                with col3:
-                    st.metric(f"{trans_type.title()} - Rata-rata", f"{summary['avg_quantity']:.1f}")
+            
+            cols = st.columns(len(movement_data['movement_summary']))
+            
+            for idx, (trans_type, summary) in enumerate(movement_data['movement_summary'].items()):
+                with cols[idx]:
+                    st.metric(f"{trans_type.upper()}", summary['total_transactions'])
+                    st.write(f"Total: {summary['total_quantity']:.0f}")
+                    st.write(f"Rata-rata: {summary['avg_quantity']:.1f}")
             
             # Daily movement trend
             if movement_data['daily_movement']:
@@ -377,51 +349,14 @@ class InventoryAnalytics:
                 # Convert to DataFrame
                 daily_df = pd.DataFrame.from_dict(movement_data['daily_movement'], orient='index')
                 daily_df = daily_df.fillna(0)
+                daily_df.index = pd.to_datetime(daily_df.index)
+                daily_df = daily_df.sort_index()
                 
                 # Line chart
                 fig = px.line(daily_df, title='Tren Pergerakan Harian')
-                st.plotly_chart(fig)
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Tidak cukup data untuk analisis pergerakan")
-    
-    def display_department_efficiency(self, days: int):
-        """Display department efficiency analysis"""
-        st.subheader(f"🏢 Analisis Efisiensi Departemen ({days} hari)")
-        
-        efficiency_data = self.get_department_efficiency_analysis(days)
-        
-        if efficiency_data['department_analysis']:
-            # Convert to DataFrame
-            df = pd.DataFrame.from_dict(efficiency_data['department_analysis'], orient='index')
-            
-            # Display summary
-            st.metric("Rata-rata Efisiensi", f"{efficiency_data['avg_efficiency']:.2f}")
-            
-            # Department comparison
-            st.subheader("Perbandingan Departemen")
-            st.dataframe(df)
-            
-            # Efficiency chart
-            fig = px.bar(df, y='efficiency_ratio', title='Rasio Efisiensi per Departemen')
-            st.plotly_chart(fig)
-            
-            # Consumption vs Receipt chart
-            fig = px.scatter(df, x='total_received', y='total_consumed', 
-                           title='Konsumsi vs Penerimaan Departemen',
-                           hover_data=['total_consumed', 'total_received'])
-            st.plotly_chart(fig)
-        else:
-            st.info("Tidak cukup data untuk analisis departemen")
-    
-    def display_trends_and_predictions(self, days: int):
-        """Display trends and simple predictions"""
-        st.subheader(f"📊 Tren & Prediksi ({days} hari)")
-        
-        # This would integrate with forecasting data
-        st.info("Fitur prediksi akan segera tersedia dengan integrasi data forecasting")
-        
-        # Placeholder for future integration
-        st.write("Data tren dan prediksi akan ditampilkan di sini setelah integrasi dengan modul forecasting.")
 
 def display_analytics_widget():
     """Display a compact analytics widget"""

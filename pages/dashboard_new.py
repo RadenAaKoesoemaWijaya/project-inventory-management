@@ -184,7 +184,7 @@ def app():
                 values='Total Stock', 
                 names='Category',
                 title='Distribusi Stok per Kategori',
-                color_discrete_sequence=px.colors.qualitative.Greens
+                color_discrete_sequence=px.colors.sequential.Greens
             )
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)

@@ -332,7 +332,7 @@ def farmer_statistics():
                 values=crop_counts.values, 
                 names=crop_counts.index,
                 title="Distribusi Komoditas Utama",
-                color_discrete_sequence=px.colors.qualitative.Greens
+                color_discrete_sequence=px.colors.sequential.Greens
             )
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
@@ -344,8 +344,7 @@ def farmer_statistics():
                 x='land_area',
                 title="Distribusi Luas Lahan",
                 nbins=10,
-                color='land_area',
-                color_continuous_scale='Greens'
+                color_discrete_sequence=px.colors.sequential.Greens
             )
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)

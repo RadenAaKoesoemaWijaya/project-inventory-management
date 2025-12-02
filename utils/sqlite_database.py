@@ -222,6 +222,30 @@ class SQLiteDatabase:
             )
         ''')
         
+        # Create distributions table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS distributions (
+                id TEXT PRIMARY KEY,
+                merchant_id TEXT,
+                warehouse_id TEXT,
+                delivery_date DATE,
+                crop_type TEXT,
+                quantity REAL,
+                unit TEXT,
+                priority TEXT DEFAULT 'Normal',
+                delivery_method TEXT,
+                distance REAL DEFAULT 0,
+                estimated_distance REAL DEFAULT 0,
+                estimated_cost REAL DEFAULT 0,
+                status TEXT DEFAULT 'Pending',
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP,
+                FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+                FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+            )
+        ''')
+        
         # Create indexes for better performance
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)')
@@ -712,8 +736,8 @@ def get_merchants(merchant_type=None, location=None, limit=50):
         conn = db._get_connection()
         cursor = conn.cursor()
         
-        # Explicitly select all columns and ensure is_active is included
-        query = "SELECT id, name, type, location, coordinates, phone, COALESCE(is_active, 1) as is_active, created_at FROM merchants"
+        # Explicitly select all columns including email, business_license, and join_date
+        query = "SELECT id, name, type, location, coordinates, phone, email, business_license, join_date, COALESCE(is_active, 1) as is_active, created_at, updated_at, notes FROM merchants"
         params = []
         
         conditions = []

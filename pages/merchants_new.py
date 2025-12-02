@@ -299,7 +299,11 @@ def merchant_statistics():
             st.metric("Lokasi Unik", unique_locations)
         
         with col_stat4:
-            new_merchants = len(merchants_df[pd.to_datetime(merchants_df['join_date'], errors='coerce') >= datetime.now() - timedelta(days=30)])
+            # Check if join_date column exists before using it
+            if 'join_date' in merchants_df.columns:
+                new_merchants = len(merchants_df[pd.to_datetime(merchants_df['join_date'], errors='coerce') >= datetime.now() - timedelta(days=30)])
+            else:
+                new_merchants = 0
             st.metric("Pedagang Baru (30 hari)", new_merchants)
         
         # Charts
@@ -313,7 +317,7 @@ def merchant_statistics():
                 values=type_counts.values, 
                 names=type_counts.index,
                 title="Distribusi Tipe Pedagang",
-                color_discrete_sequence=px.colors.qualitative.Blues
+                color_discrete_sequence=px.colors.sequential.Blues
             )
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
@@ -336,11 +340,15 @@ def merchant_statistics():
         # Join date trends
         st.subheader("📈 Tren Pendaftaran Pedagang")
         
-        merchants_df['join_date_dt'] = pd.to_datetime(merchants_df['join_date'], errors='coerce')
-        merchants_df['join_month'] = merchants_df['join_date_dt'].dt.to_period('M')
-        
-        monthly_counts = merchants_df.groupby('join_month').size().reset_index(name='count')
-        monthly_counts['join_month'] = monthly_counts['join_month'].dt.to_timestamp()
+        # Check if join_date column exists
+        if 'join_date' in merchants_df.columns:
+            merchants_df['join_date_dt'] = pd.to_datetime(merchants_df['join_date'], errors='coerce')
+            merchants_df['join_month'] = merchants_df['join_date_dt'].dt.to_period('M')
+            
+            monthly_counts = merchants_df.groupby('join_month').size().reset_index(name='count')
+            monthly_counts['join_month'] = monthly_counts['join_month'].dt.to_timestamp()
+        else:
+            monthly_counts = pd.DataFrame()
         
         if not monthly_counts.empty:
             fig = px.line(

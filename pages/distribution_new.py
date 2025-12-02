@@ -11,6 +11,10 @@ from utils.sqlite_database import (
     get_database
 )
 import uuid
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 def app():
     require_auth()
