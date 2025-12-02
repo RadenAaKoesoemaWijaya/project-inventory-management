@@ -90,7 +90,18 @@ class SQLiteDatabase:
                 coordinates TEXT,  -- JSON string for lat/lng
                 land_area REAL,
                 phone TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                email TEXT,
+                main_crop TEXT,
+                farming_experience INTEGER DEFAULT 0,
+                join_date DATE,
+                farming_type TEXT,
+                irrigation_source TEXT,
+                soil_type TEXT,
+                harvest_frequency TEXT,
+                notes TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
             )
         ''')
         
@@ -103,8 +114,13 @@ class SQLiteDatabase:
                 location TEXT,
                 coordinates TEXT,  -- JSON string for lat/lng
                 phone TEXT,
+                email TEXT,
+                business_license TEXT,
+                join_date DATE,
+                notes TEXT,
                 is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
             )
         ''')
         
@@ -215,12 +231,47 @@ class SQLiteDatabase:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_date ON inventory_transactions(transaction_date)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)')
         
-        # Add is_active column to merchants table if it doesn't exist (for backward compatibility)
-        try:
-            cursor.execute("ALTER TABLE merchants ADD COLUMN is_active BOOLEAN DEFAULT 1")
-        except sqlite3.OperationalError:
-            # Column already exists, ignore error
-            pass
+        # Migration: Add missing columns to existing tables for backward compatibility
+        # Farmers table migrations
+        farmers_columns = [
+            ("email", "TEXT"),
+            ("main_crop", "TEXT"),
+            ("farming_experience", "INTEGER DEFAULT 0"),
+            ("join_date", "DATE"),
+            ("farming_type", "TEXT"),
+            ("irrigation_source", "TEXT"),
+            ("soil_type", "TEXT"),
+            ("harvest_frequency", "TEXT"),
+            ("notes", "TEXT"),
+            ("is_active", "BOOLEAN DEFAULT 1"),
+            ("updated_at", "TIMESTAMP")
+        ]
+        
+        for col_name, col_type in farmers_columns:
+            try:
+                cursor.execute(f"ALTER TABLE farmers ADD COLUMN {col_name} {col_type}")
+                logger.info(f"Added column {col_name} to farmers table")
+            except sqlite3.OperationalError:
+                # Column already exists, ignore error
+                pass
+        
+        # Merchants table migrations
+        merchants_columns = [
+            ("email", "TEXT"),
+            ("business_license", "TEXT"),
+            ("join_date", "DATE"),
+            ("notes", "TEXT"),
+            ("is_active", "BOOLEAN DEFAULT 1"),
+            ("updated_at", "TIMESTAMP")
+        ]
+        
+        for col_name, col_type in merchants_columns:
+            try:
+                cursor.execute(f"ALTER TABLE merchants ADD COLUMN {col_name} {col_type}")
+                logger.info(f"Added column {col_name} to merchants table")
+            except sqlite3.OperationalError:
+                # Column already exists, ignore error
+                pass
         
         conn.commit()
         logger.info("Database tables initialized successfully")
