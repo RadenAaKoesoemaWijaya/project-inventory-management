@@ -139,6 +139,7 @@ class SQLiteDatabase:
                 unit TEXT,
                 quality_grade TEXT,
                 notes TEXT,
+                price_per_unit REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (farmer_id) REFERENCES farmers(id),
                 FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
@@ -154,12 +155,16 @@ class SQLiteDatabase:
                 quantity REAL,
                 from_warehouse_id TEXT,
                 to_warehouse_id TEXT,
+                merchant_id TEXT,
+                route_id TEXT,
                 transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_by TEXT,
                 notes TEXT,
                 FOREIGN KEY (item_id) REFERENCES items(id),
                 FOREIGN KEY (from_warehouse_id) REFERENCES warehouses(id),
-                FOREIGN KEY (to_warehouse_id) REFERENCES warehouses(id)
+                FOREIGN KEY (to_warehouse_id) REFERENCES warehouses(id),
+                FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+                FOREIGN KEY (route_id) REFERENCES distribution_routes(id)
             )
         ''')
         
@@ -302,6 +307,28 @@ class SQLiteDatabase:
             try:
                 cursor.execute(f"ALTER TABLE merchants ADD COLUMN {col_name} {col_type}")
                 logger.info(f"Added column {col_name} to merchants table")
+            except sqlite3.OperationalError:
+                # Column already exists, ignore error
+                pass
+
+        # Harvests table migrations (add price_per_unit if missing)
+        try:
+            cursor.execute("ALTER TABLE harvests ADD COLUMN price_per_unit REAL")
+            logger.info("Added column price_per_unit to harvests table")
+        except sqlite3.OperationalError:
+            # Column already exists, ignore error
+            pass
+
+        # Inventory transactions table migrations (add merchant_id and route_id if missing)
+        inventory_transactions_columns = [
+            ("merchant_id", "TEXT"),
+            ("route_id", "TEXT")
+        ]
+
+        for col_name, col_type in inventory_transactions_columns:
+            try:
+                cursor.execute(f"ALTER TABLE inventory_transactions ADD COLUMN {col_name} {col_type}")
+                logger.info(f"Added column {col_name} to inventory_transactions table")
             except sqlite3.OperationalError:
                 # Column already exists, ignore error
                 pass

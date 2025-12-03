@@ -214,41 +214,76 @@ class DummyDataGenerator:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', fertilizers)
     
-    def generate_harvests(self, count=200):
-        """Generate harvest data"""
+    def generate_harvests(self, count=400):
+        """Generate harvest data over multiple years with seasons and prices"""
         # Get existing farmers and warehouses
         self.cursor.execute("SELECT id FROM farmers")
         farmer_ids = [row[0] for row in self.cursor.fetchall()]
         
         self.cursor.execute("SELECT id FROM warehouses")
         warehouse_ids = [row[0] for row in self.cursor.fetchall()]
-        
+
+        # Simple base price per crop type for simulation (per kg equivalent)
+        base_prices = {
+            "Padi": 6000,
+            "Jagung": 5000,
+            "Kedelai": 7000,
+            "Kacang Tanah": 8000,
+            "Ubi Jalar": 4000,
+            "Singkong": 3500,
+            "Tomat": 9000,
+            "Cabai": 20000,
+            "Terung": 7000,
+            "Bayam": 5000,
+            "Kangkung": 4500,
+            "Sawi": 5500,
+            "Wortel": 8000,
+            "Kentang": 9000,
+        }
+
+        def normalize_season(dt: datetime) -> str:
+            """Map month to simple seasons for consistency."""
+            m = dt.month
+            if m in (11, 12, 1, 2):
+                return "Musim Hujan"
+            if m in (3, 4, 5):
+                return "Musim Transisi"
+            return "Musim Kemarau"
+
         harvests = []
-        # Generate data for 2 years to support seasonal forecasting
-        start_date = datetime.now() - timedelta(days=730)
-        
+        # Generate data over 3–5 years back
+        max_days_back = 365 * random.randint(3, 5)
         for i in range(count):
-            # Distribute dates across the 2 year period
-            days_offset = random.randint(0, 730)
-            harvest_date = start_date + timedelta(days=days_offset)
-            
+            harvest_date = datetime.now() - timedelta(days=random.randint(0, max_days_back))
+            season = normalize_season(harvest_date)
+            crop_type = random.choice(self.crop_types)
+
+            # quantity in kg/ton/karung (approximate conversion not enforced strictly)
+            unit = random.choice(["kg", "ton", "karung"])
+            quantity = round(random.uniform(100, 10000), 2)
+
+            # Base price with some randomness (+/- 20%)
+            base_price = base_prices.get(crop_type, 5000)
+            price_per_unit = round(base_price * random.uniform(0.8, 1.2), 2)
+
             harvests.append((
                 str(uuid.uuid4()),
                 random.choice(farmer_ids),
                 random.choice(warehouse_ids),
                 harvest_date.strftime('%Y-%m-%d'),
-                random.choice(self.seasons),
-                random.choice(self.crop_types),
-                round(random.uniform(100, 10000), 2),
-                random.choice(["kg", "ton", "karung"]),
+                season,
+                crop_type,
+                quantity,
+                unit,
                 random.choice(self.quality_grades),
                 f"Catatan panen #{i+1}",
-                harvest_date
+                price_per_unit,
+                harvest_date,
             ))
-        
+
         self.cursor.executemany('''
-            INSERT OR IGNORE INTO harvests (id, farmer_id, warehouse_id, harvest_date, season, crop_type, quantity, unit, quality_grade, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO harvests (id, farmer_id, warehouse_id, harvest_date, season, crop_type, quantity, unit, quality_grade, notes, price_per_unit, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', harvests)
     
     def generate_transactions(self, count=500):
@@ -260,14 +295,36 @@ class DummyDataGenerator:
         self.cursor.execute("SELECT id FROM warehouses")
         warehouse_ids = [row[0] for row in self.cursor.fetchall()]
         
+        # Get existing distribution routes to link distributions to merchants and routes
+        self.cursor.execute("SELECT id, from_warehouse_id, to_merchant_id FROM distribution_routes")
+        route_rows = self.cursor.fetchall()
+        routes = [
+            {
+                "route_id": r[0],
+                "from_warehouse_id": r[1],
+                "merchant_id": r[2],
+            }
+            for r in route_rows
+        ]
+        
         transactions = []
-        # Increase 'out' transactions for consumption forecasting
-        transaction_types = ['in', 'out', 'out', 'transfer', 'distribution']
+        transaction_types = ['in', 'out', 'transfer', 'distribution']
         
         for i in range(count):
             transaction_type = random.choice(transaction_types)
-            from_warehouse = random.choice(warehouse_ids) if transaction_type in ['out', 'transfer', 'distribution'] else None
-            to_warehouse = random.choice(warehouse_ids) if transaction_type in ['in', 'transfer'] else None
+            merchant_id = None
+            route_id = None
+            
+            if transaction_type == 'distribution' and routes:
+                # Choose a distribution route and link transaction to merchant and route
+                selected_route = random.choice(routes)
+                from_warehouse = selected_route["from_warehouse_id"]
+                to_warehouse = None
+                merchant_id = selected_route["merchant_id"]
+                route_id = selected_route["route_id"]
+            else:
+                from_warehouse = random.choice(warehouse_ids) if transaction_type in ['out', 'transfer'] else None
+                to_warehouse = random.choice(warehouse_ids) if transaction_type in ['in', 'transfer'] else None
             
             transactions.append((
                 str(uuid.uuid4()),
@@ -276,69 +333,18 @@ class DummyDataGenerator:
                 round(random.uniform(1, 1000), 2),
                 from_warehouse,
                 to_warehouse,
+                merchant_id,
+                route_id,
                 datetime.now() - timedelta(days=random.randint(1, 180)),
                 "system",  # created_by
                 f"Transaksi {transaction_type} #{i+1}"
             ))
         
         self.cursor.executemany('''
-            INSERT OR IGNORE INTO inventory_transactions (id, item_id, transaction_type, quantity, from_warehouse_id, to_warehouse_id, transaction_date, created_by, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO inventory_transactions (id, item_id, transaction_type, quantity, from_warehouse_id, to_warehouse_id, merchant_id, route_id, transaction_date, created_by, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', transactions)
     
-    def generate_distributions(self, count=50):
-        """Generate distribution data"""
-        # Get existing merchants and warehouses
-        self.cursor.execute("SELECT id FROM merchants")
-        merchant_ids = [row[0] for row in self.cursor.fetchall()]
-        
-        self.cursor.execute("SELECT id FROM warehouses")
-        warehouse_ids = [row[0] for row in self.cursor.fetchall()]
-        
-        if not merchant_ids or not warehouse_ids:
-            return
-
-        distributions = []
-        statuses = ['Pending', 'In Progress', 'In Progress', 'Completed', 'Cancelled']
-        priorities = ['Normal', 'Tinggi', 'Rendah']
-        delivery_methods = ['Truk', 'Pickup', 'Motor']
-        
-        for i in range(count):
-            status = random.choice(statuses)
-            delivery_date = datetime.now()
-            
-            if status == 'Completed':
-                delivery_date = datetime.now() - timedelta(days=random.randint(1, 30))
-            elif status == 'Pending':
-                delivery_date = datetime.now() + timedelta(days=random.randint(1, 7))
-            
-            distributions.append((
-                str(uuid.uuid4()),
-                random.choice(merchant_ids),
-                random.choice(warehouse_ids),
-                delivery_date.strftime('%Y-%m-%d'),
-                random.choice(self.crop_types),
-                round(random.uniform(50, 2000), 2),
-                "kg",
-                random.choice(priorities),
-                random.choice(delivery_methods),
-                round(random.uniform(5, 50), 2), # distance
-                round(random.uniform(5, 50), 2), # estimated_distance
-                round(random.uniform(50000, 500000), 2), # estimated_cost
-                status,
-                f"Distribusi simulasi #{i+1}",
-                datetime.now()
-            ))
-            
-        self.cursor.executemany('''
-            INSERT OR IGNORE INTO distributions (
-                id, merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit, 
-                priority, delivery_method, distance, estimated_distance, estimated_cost, 
-                status, notes, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', distributions)
-
     def generate_distribution_routes(self, count=100):
         """Generate distribution routes"""
         # Get existing warehouses and merchants
@@ -439,13 +445,10 @@ class DummyDataGenerator:
             self.generate_fertilizers(80)
             
             print("Generating harvests...")
-            self.generate_harvests(400) # Increased count
+            self.generate_harvests(200)
             
             print("Generating transactions...")
             self.generate_transactions(500)
-            
-            print("Generating distributions...")
-            self.generate_distributions(100)
             
             print("Generating distribution routes...")
             self.generate_distribution_routes(100)
@@ -468,7 +471,7 @@ class DummyDataGenerator:
     def print_summary(self):
         """Print summary of generated data"""
         tables = ['users', 'warehouses', 'items', 'farmers', 'merchants', 'harvests', 
-                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications', 'distributions']
+                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications']
         
         print("\n📊 Data Summary:")
         print("-" * 40)

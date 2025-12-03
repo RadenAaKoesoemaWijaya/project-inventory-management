@@ -128,7 +128,101 @@ def app():
             st.info("Belum ada data stok di lumbung")
     else:
         st.error("Tidak dapat memuat data distribusi stok")
-    
+
+    # Distribution analytics
+    st.markdown("---")
+    st.header("🚚 Distribusi Barang ke Pedagang")
+
+    col_dist1, col_dist2 = st.columns(2)
+
+    # Top merchants by distributed quantity
+    with col_dist1:
+        st.subheader("Top Pedagang berdasarkan Volume")
+        cursor = execute_query('''
+            SELECT 
+                COALESCE(m.name, 'Tidak diketahui') AS merchant_name,
+                COUNT(*) AS shipment_count,
+                SUM(it.quantity) AS total_quantity
+            FROM inventory_transactions it
+            LEFT JOIN merchants m ON it.merchant_id = m.id
+            WHERE it.transaction_type = 'distribution'
+            GROUP BY m.id, merchant_name
+            HAVING total_quantity IS NOT NULL
+            ORDER BY total_quantity DESC
+            LIMIT 10
+        ''')
+
+        if cursor:
+            rows = cursor.fetchall()
+            if rows:
+                merchants_df = pd.DataFrame(rows, columns=[
+                    "Pedagang", "Jumlah Pengiriman", "Total Volume"
+                ])
+                st.dataframe(merchants_df, use_container_width=True)
+
+                fig_merchants = px.bar(
+                    merchants_df,
+                    x="Pedagang",
+                    y="Total Volume",
+                    title="Volume Distribusi per Pedagang",
+                    color="Total Volume",
+                    color_continuous_scale="Blues"
+                )
+                fig_merchants.update_layout(height=350, xaxis_tickangle=-45)
+                st.plotly_chart(fig_merchants, use_container_width=True)
+            else:
+                st.info("Belum ada data distribusi ke pedagang.")
+        else:
+            st.error("Gagal memuat data distribusi pedagang.")
+
+    # Top routes by volume
+    with col_dist2:
+        st.subheader("Top Rute Distribusi")
+        cursor = execute_query('''
+            SELECT 
+                COALESCE(dr.route_name, 'Tanpa Rute') AS route_name,
+                COALESCE(w.name, '-') AS from_warehouse,
+                COALESCE(m.name, '-') AS merchant_name,
+                COUNT(*) AS shipment_count,
+                SUM(it.quantity) AS total_quantity,
+                AVG(dr.distance) AS avg_distance,
+                AVG(dr.fuel_cost) AS avg_fuel_cost
+            FROM inventory_transactions it
+            LEFT JOIN distribution_routes dr ON it.route_id = dr.id
+            LEFT JOIN warehouses w ON dr.from_warehouse_id = w.id
+            LEFT JOIN merchants m ON dr.to_merchant_id = m.id
+            WHERE it.transaction_type = 'distribution'
+            GROUP BY dr.id, route_name, from_warehouse, merchant_name
+            HAVING total_quantity IS NOT NULL
+            ORDER BY total_quantity DESC
+            LIMIT 10
+        ''')
+
+        if cursor:
+            rows = cursor.fetchall()
+            if rows:
+                routes_df = pd.DataFrame(rows, columns=[
+                    "Rute", "Dari Lumbung", "Ke Pedagang",
+                    "Jumlah Pengiriman", "Total Volume",
+                    "Rata-rata Jarak", "Rata-rata Biaya BBM"
+                ])
+                st.dataframe(routes_df, use_container_width=True)
+
+                fig_routes = px.bar(
+                    routes_df,
+                    x="Rute",
+                    y="Total Volume",
+                    title="Volume Distribusi per Rute",
+                    color="Total Volume",
+                    color_continuous_scale="Oranges"
+                )
+                fig_routes.update_layout(height=350, xaxis_tickangle=-45)
+                st.plotly_chart(fig_routes, use_container_width=True)
+            else:
+                st.info("Belum ada data rute distribusi.")
+        else:
+            st.error("Gagal memuat data rute distribusi.")
+
     # Recent harvests
     st.markdown("---")
     st.header("🌾 Panen Terbaru")
@@ -199,6 +293,90 @@ def app():
         
     except Exception as e:
         st.error(f"Error loading category data: {e}")
+
+    # Harvest time-series (volume & value)
+    st.markdown("---")
+    st.header("📈 Tren Panen & Nilai Produksi")
+
+    cursor = execute_query('''
+        SELECT 
+            harvest_date,
+            season,
+            crop_type,
+            quantity,
+            COALESCE(price_per_unit, 0) AS price_per_unit
+        FROM harvests
+    ''')
+
+    if cursor:
+        rows = cursor.fetchall()
+        if rows:
+            harvest_df = pd.DataFrame(rows, columns=[
+                "harvest_date", "season", "crop_type", "quantity", "price_per_unit"
+            ])
+
+            # Parse dates and build monthly aggregates
+            harvest_df["harvest_date"] = pd.to_datetime(harvest_df["harvest_date"], errors="coerce")
+            harvest_df = harvest_df.dropna(subset=["harvest_date"])
+            harvest_df["month"] = harvest_df["harvest_date"].dt.to_period("M").dt.to_timestamp()
+            harvest_df["total_value"] = harvest_df["quantity"] * harvest_df["price_per_unit"]
+
+            agg_df = harvest_df.groupby("month").agg(
+                total_quantity=("quantity", "sum"),
+                total_value=("total_value", "sum"),
+            ).reset_index().sort_values("month")
+
+            col_ts1, col_ts2 = st.columns(2)
+
+            with col_ts1:
+                st.subheader("Volume Panen per Bulan")
+                fig_qty = px.line(
+                    agg_df,
+                    x="month",
+                    y="total_quantity",
+                    markers=True,
+                    title="Total Volume Panen (Semua Komoditas)",
+                )
+                fig_qty.update_layout(height=350, xaxis_title="Bulan", yaxis_title="Volume")
+                st.plotly_chart(fig_qty, use_container_width=True)
+
+            with col_ts2:
+                st.subheader("Nilai Produksi per Bulan")
+                fig_val = px.line(
+                    agg_df,
+                    x="month",
+                    y="total_value",
+                    markers=True,
+                    title="Total Nilai Produksi (Rp)",
+                )
+                fig_val.update_layout(height=350, xaxis_title="Bulan", yaxis_title="Nilai (Rp)")
+                st.plotly_chart(fig_val, use_container_width=True)
+
+            # Optional: filter by komoditas
+            st.subheader("Tren per Komoditas (Opsional)")
+            crops = sorted(harvest_df["crop_type"].dropna().unique().tolist())
+            selected_crop = st.selectbox("Pilih Komoditas", ["(Semua)"] + crops)
+
+            if selected_crop != "(Semua)":
+                crop_df = harvest_df[harvest_df["crop_type"] == selected_crop]
+                crop_agg = crop_df.groupby("month").agg(
+                    total_quantity=("quantity", "sum"),
+                    total_value=("total_value", "sum"),
+                ).reset_index().sort_values("month")
+
+                fig_crop = px.line(
+                    crop_agg,
+                    x="month",
+                    y="total_quantity",
+                    markers=True,
+                    title=f"Volume Panen per Bulan - {selected_crop}",
+                )
+                fig_crop.update_layout(height=300, xaxis_title="Bulan", yaxis_title="Volume")
+                st.plotly_chart(fig_crop, use_container_width=True)
+        else:
+            st.info("Belum ada data panen untuk analisis time-series.")
+    else:
+        st.error("Gagal memuat data panen untuk analisis time-series.")
     
     # Low stock alerts
     st.markdown("---")

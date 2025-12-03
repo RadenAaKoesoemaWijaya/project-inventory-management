@@ -143,8 +143,8 @@ class SafeDummyDataGenerator:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', items)
     
-    def generate_safe_harvests(self, count=25):
-        """Generate small amount of harvest data for safe simulation"""
+    def generate_safe_harvests(self, count=40):
+        """Generate small amount of harvest data for safe simulation (multi-season, with prices)"""
         # Get existing farmers and warehouses
         self.cursor.execute("SELECT id FROM farmers LIMIT 10")
         farmer_ids = [row[0] for row in self.cursor.fetchall()]
@@ -154,33 +154,56 @@ class SafeDummyDataGenerator:
         
         if not farmer_ids or not warehouse_ids:
             return
+
+        # Base prices (simplified subset)
+        base_prices = {
+            "Padi": 6000,
+            "Jagung": 5000,
+            "Kedelai": 7000,
+            "Tomat": 9000,
+            "Cabai": 20000,
+            "Terung": 7000,
+            "Bayam": 5000,
+        }
+
+        def normalize_season(dt: datetime) -> str:
+            m = dt.month
+            if m in (11, 12, 1, 2):
+                return "Musim Hujan"
+            if m in (3, 4, 5):
+                return "Musim Transisi"
+            return "Musim Kemarau"
         
         harvests = []
-        # Generate data for 1.5 years to support seasonal forecasting
-        start_date = datetime.now() - timedelta(days=540)
-        
+        max_days_back = 365 * 2  # ~2 tahun ke belakang untuk mode safe
         for i in range(count):
-            # Distribute dates across the period
-            days_offset = random.randint(0, 540)
-            harvest_date = start_date + timedelta(days=days_offset)
-            
+            harvest_date = datetime.now() - timedelta(days=random.randint(0, max_days_back))
+            season = normalize_season(harvest_date)
+            crop_type = random.choice(self.crop_types)
+            unit = random.choice(["kg", "ton"])
+            quantity = round(random.uniform(50, 800), 2)
+
+            base_price = base_prices.get(crop_type, 5000)
+            price_per_unit = round(base_price * random.uniform(0.85, 1.15), 2)
+
             harvests.append((
                 str(uuid.uuid4()),
                 random.choice(farmer_ids),
                 random.choice(warehouse_ids),
                 harvest_date.strftime('%Y-%m-%d'),
-                random.choice(self.seasons),
-                random.choice(self.crop_types),
-                round(random.uniform(50, 500), 2),
-                random.choice(["kg", "ton"]),
+                season,
+                crop_type,
+                quantity,
+                unit,
                 random.choice(self.quality_grades),
                 f"Panen simulasi #{i+1}",
+                price_per_unit,
                 harvest_date
             ))
         
         self.cursor.executemany('''
-            INSERT OR IGNORE INTO harvests (id, farmer_id, warehouse_id, harvest_date, season, crop_type, quantity, unit, quality_grade, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO harvests (id, farmer_id, warehouse_id, harvest_date, season, crop_type, quantity, unit, quality_grade, notes, price_per_unit, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', harvests)
     
     def generate_safe_transactions(self, count=50):
@@ -192,17 +215,38 @@ class SafeDummyDataGenerator:
         self.cursor.execute("SELECT id FROM warehouses LIMIT 5")
         warehouse_ids = [row[0] for row in self.cursor.fetchall()]
         
+        # Get existing distribution routes (if any)
+        self.cursor.execute("SELECT id, from_warehouse_id, to_merchant_id FROM distribution_routes")
+        route_rows = self.cursor.fetchall()
+        routes = [
+            {
+                "route_id": r[0],
+                "from_warehouse_id": r[1],
+                "merchant_id": r[2],
+            }
+            for r in route_rows
+        ]
+        
         if not item_ids or not warehouse_ids:
             return
         
         transactions = []
-        # Increase 'out' transactions for consumption forecasting
-        transaction_types = ['in', 'out', 'out', 'transfer', 'distribution']
+        transaction_types = ['in', 'out', 'transfer', 'distribution']
         
         for i in range(count):
             transaction_type = random.choice(transaction_types)
-            from_warehouse = random.choice(warehouse_ids) if transaction_type in ['out', 'transfer', 'distribution'] else None
-            to_warehouse = random.choice(warehouse_ids) if transaction_type in ['in', 'transfer'] else None
+            merchant_id = None
+            route_id = None
+            
+            if transaction_type == 'distribution' and routes:
+                selected_route = random.choice(routes)
+                from_warehouse = selected_route["from_warehouse_id"]
+                to_warehouse = None
+                merchant_id = selected_route["merchant_id"]
+                route_id = selected_route["route_id"]
+            else:
+                from_warehouse = random.choice(warehouse_ids) if transaction_type in ['out', 'transfer'] else None
+                to_warehouse = random.choice(warehouse_ids) if transaction_type in ['in', 'transfer'] else None
             
             transactions.append((
                 str(uuid.uuid4()),
@@ -211,68 +255,17 @@ class SafeDummyDataGenerator:
                 round(random.uniform(1, 100), 2),
                 from_warehouse,
                 to_warehouse,
+                merchant_id,
+                route_id,
                 datetime.now() - timedelta(days=random.randint(1, 90)),
                 "simulation_user",  # created_by
                 f"Transaksi simulasi {transaction_type} #{i+1}"
             ))
         
         self.cursor.executemany('''
-            INSERT OR IGNORE INTO inventory_transactions (id, item_id, transaction_type, quantity, from_warehouse_id, to_warehouse_id, transaction_date, created_by, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO inventory_transactions (id, item_id, transaction_type, quantity, from_warehouse_id, to_warehouse_id, merchant_id, route_id, transaction_date, created_by, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', transactions)
-    
-    def generate_safe_distributions(self, count=20):
-        """Generate small amount of distribution data for safe simulation"""
-        # Get existing merchants and warehouses
-        self.cursor.execute("SELECT id FROM merchants LIMIT 10")
-        merchant_ids = [row[0] for row in self.cursor.fetchall()]
-        
-        self.cursor.execute("SELECT id FROM warehouses LIMIT 5")
-        warehouse_ids = [row[0] for row in self.cursor.fetchall()]
-        
-        if not merchant_ids or not warehouse_ids:
-            return
-
-        distributions = []
-        statuses = ['Pending', 'In Progress', 'In Progress', 'Completed']
-        priorities = ['Normal', 'Tinggi']
-        delivery_methods = ['Truk', 'Pickup']
-        
-        for i in range(count):
-            status = random.choice(statuses)
-            delivery_date = datetime.now()
-            
-            if status == 'Completed':
-                delivery_date = datetime.now() - timedelta(days=random.randint(1, 14))
-            elif status == 'Pending':
-                delivery_date = datetime.now() + timedelta(days=random.randint(1, 5))
-            
-            distributions.append((
-                str(uuid.uuid4()),
-                random.choice(merchant_ids),
-                random.choice(warehouse_ids),
-                delivery_date.strftime('%Y-%m-%d'),
-                random.choice(self.crop_types),
-                round(random.uniform(20, 500), 2),
-                "kg",
-                random.choice(priorities),
-                random.choice(delivery_methods),
-                round(random.uniform(2, 20), 2), # distance
-                round(random.uniform(2, 20), 2), # estimated_distance
-                round(random.uniform(20000, 200000), 2), # estimated_cost
-                status,
-                f"Distribusi simulasi #{i+1}",
-                datetime.now()
-            ))
-            
-        self.cursor.executemany('''
-            INSERT OR IGNORE INTO distributions (
-                id, merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit, 
-                priority, delivery_method, distance, estimated_distance, estimated_cost, 
-                status, notes, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', distributions)
     
     def generate_all_safe_data(self):
         """Generate safe simulation data for regular users"""
@@ -294,13 +287,10 @@ class SafeDummyDataGenerator:
             self.generate_safe_items(30)
             
             print("Generating harvests...")
-            self.generate_safe_harvests(40) # Increased count
+            self.generate_safe_harvests(25)
             
             print("Generating transactions...")
             self.generate_safe_transactions(50)
-            
-            print("Generating distributions...")
-            self.generate_safe_distributions(20)
             
             self.conn.commit()
             print("✅ Safe simulation data generation completed successfully!")
@@ -317,7 +307,7 @@ class SafeDummyDataGenerator:
     def print_safe_summary(self):
         """Print summary of generated safe data"""
         tables = ['users', 'warehouses', 'items', 'farmers', 'merchants', 'harvests', 
-                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications', 'distributions']
+                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications']
         
         print("\n📊 Safe Simulation Data Summary:")
         print("-" * 40)
