@@ -49,9 +49,9 @@ def summary_report():
     # Date range selector
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Tanggal Mulai", value=datetime.now() - timedelta(days=30))
+        start_date = st.date_input("Tanggal Mulai", value=datetime.now() - timedelta(days=30), key="summary_start")
     with col2:
-        end_date = st.date_input("Tanggal Akhir", value=datetime.now())
+        end_date = st.date_input("Tanggal Akhir", value=datetime.now(), key="summary_end")
     
     # Get data
     harvests_df = get_harvests(limit=1000)
@@ -162,10 +162,10 @@ def harvest_report():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        start_date = st.date_input("Tanggal Mulai", value=datetime.now() - timedelta(days=30))
+        start_date = st.date_input("Tanggal Mulai", value=datetime.now() - timedelta(days=30), key="harvest_start")
     
     with col2:
-        end_date = st.date_input("Tanggal Akhir", value=datetime.now())
+        end_date = st.date_input("Tanggal Akhir", value=datetime.now(), key="harvest_end")
     
     with col3:
         crop_filter = st.selectbox("Filter Komoditas", ["Semua", "Beras", "Jagung", "Kacang-kacangan", "Sayuran", "Buah"])

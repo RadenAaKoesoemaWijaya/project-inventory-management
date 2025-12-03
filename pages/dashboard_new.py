@@ -288,9 +288,7 @@ def app():
             st.dataframe(category_df, use_container_width=True)
         else:
             st.info("Belum ada data kategori item")
-        
-        conn.close()
-        
+
     except Exception as e:
         st.error(f"Error loading category data: {e}")
 
