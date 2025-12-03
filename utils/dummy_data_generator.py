@@ -224,8 +224,14 @@ class DummyDataGenerator:
         warehouse_ids = [row[0] for row in self.cursor.fetchall()]
         
         harvests = []
+        # Generate data for 2 years to support seasonal forecasting
+        start_date = datetime.now() - timedelta(days=730)
+        
         for i in range(count):
-            harvest_date = datetime.now() - timedelta(days=random.randint(1, 365))
+            # Distribute dates across the 2 year period
+            days_offset = random.randint(0, 730)
+            harvest_date = start_date + timedelta(days=days_offset)
+            
             harvests.append((
                 str(uuid.uuid4()),
                 random.choice(farmer_ids),
@@ -255,7 +261,8 @@ class DummyDataGenerator:
         warehouse_ids = [row[0] for row in self.cursor.fetchall()]
         
         transactions = []
-        transaction_types = ['in', 'out', 'transfer', 'distribution']
+        # Increase 'out' transactions for consumption forecasting
+        transaction_types = ['in', 'out', 'out', 'transfer', 'distribution']
         
         for i in range(count):
             transaction_type = random.choice(transaction_types)
@@ -279,6 +286,59 @@ class DummyDataGenerator:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', transactions)
     
+    def generate_distributions(self, count=50):
+        """Generate distribution data"""
+        # Get existing merchants and warehouses
+        self.cursor.execute("SELECT id FROM merchants")
+        merchant_ids = [row[0] for row in self.cursor.fetchall()]
+        
+        self.cursor.execute("SELECT id FROM warehouses")
+        warehouse_ids = [row[0] for row in self.cursor.fetchall()]
+        
+        if not merchant_ids or not warehouse_ids:
+            return
+
+        distributions = []
+        statuses = ['Pending', 'In Progress', 'In Progress', 'Completed', 'Cancelled']
+        priorities = ['Normal', 'Tinggi', 'Rendah']
+        delivery_methods = ['Truk', 'Pickup', 'Motor']
+        
+        for i in range(count):
+            status = random.choice(statuses)
+            delivery_date = datetime.now()
+            
+            if status == 'Completed':
+                delivery_date = datetime.now() - timedelta(days=random.randint(1, 30))
+            elif status == 'Pending':
+                delivery_date = datetime.now() + timedelta(days=random.randint(1, 7))
+            
+            distributions.append((
+                str(uuid.uuid4()),
+                random.choice(merchant_ids),
+                random.choice(warehouse_ids),
+                delivery_date.strftime('%Y-%m-%d'),
+                random.choice(self.crop_types),
+                round(random.uniform(50, 2000), 2),
+                "kg",
+                random.choice(priorities),
+                random.choice(delivery_methods),
+                round(random.uniform(5, 50), 2), # distance
+                round(random.uniform(5, 50), 2), # estimated_distance
+                round(random.uniform(50000, 500000), 2), # estimated_cost
+                status,
+                f"Distribusi simulasi #{i+1}",
+                datetime.now()
+            ))
+            
+        self.cursor.executemany('''
+            INSERT OR IGNORE INTO distributions (
+                id, merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit, 
+                priority, delivery_method, distance, estimated_distance, estimated_cost, 
+                status, notes, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', distributions)
+
     def generate_distribution_routes(self, count=100):
         """Generate distribution routes"""
         # Get existing warehouses and merchants
@@ -379,10 +439,13 @@ class DummyDataGenerator:
             self.generate_fertilizers(80)
             
             print("Generating harvests...")
-            self.generate_harvests(200)
+            self.generate_harvests(400) # Increased count
             
             print("Generating transactions...")
             self.generate_transactions(500)
+            
+            print("Generating distributions...")
+            self.generate_distributions(100)
             
             print("Generating distribution routes...")
             self.generate_distribution_routes(100)
@@ -405,7 +468,7 @@ class DummyDataGenerator:
     def print_summary(self):
         """Print summary of generated data"""
         tables = ['users', 'warehouses', 'items', 'farmers', 'merchants', 'harvests', 
-                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications']
+                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications', 'distributions']
         
         print("\n📊 Data Summary:")
         print("-" * 40)

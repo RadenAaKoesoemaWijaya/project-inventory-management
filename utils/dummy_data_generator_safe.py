@@ -156,8 +156,14 @@ class SafeDummyDataGenerator:
             return
         
         harvests = []
+        # Generate data for 1.5 years to support seasonal forecasting
+        start_date = datetime.now() - timedelta(days=540)
+        
         for i in range(count):
-            harvest_date = datetime.now() - timedelta(days=random.randint(1, 180))
+            # Distribute dates across the period
+            days_offset = random.randint(0, 540)
+            harvest_date = start_date + timedelta(days=days_offset)
+            
             harvests.append((
                 str(uuid.uuid4()),
                 random.choice(farmer_ids),
@@ -190,7 +196,8 @@ class SafeDummyDataGenerator:
             return
         
         transactions = []
-        transaction_types = ['in', 'out', 'transfer', 'distribution']
+        # Increase 'out' transactions for consumption forecasting
+        transaction_types = ['in', 'out', 'out', 'transfer', 'distribution']
         
         for i in range(count):
             transaction_type = random.choice(transaction_types)
@@ -214,6 +221,59 @@ class SafeDummyDataGenerator:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', transactions)
     
+    def generate_safe_distributions(self, count=20):
+        """Generate small amount of distribution data for safe simulation"""
+        # Get existing merchants and warehouses
+        self.cursor.execute("SELECT id FROM merchants LIMIT 10")
+        merchant_ids = [row[0] for row in self.cursor.fetchall()]
+        
+        self.cursor.execute("SELECT id FROM warehouses LIMIT 5")
+        warehouse_ids = [row[0] for row in self.cursor.fetchall()]
+        
+        if not merchant_ids or not warehouse_ids:
+            return
+
+        distributions = []
+        statuses = ['Pending', 'In Progress', 'In Progress', 'Completed']
+        priorities = ['Normal', 'Tinggi']
+        delivery_methods = ['Truk', 'Pickup']
+        
+        for i in range(count):
+            status = random.choice(statuses)
+            delivery_date = datetime.now()
+            
+            if status == 'Completed':
+                delivery_date = datetime.now() - timedelta(days=random.randint(1, 14))
+            elif status == 'Pending':
+                delivery_date = datetime.now() + timedelta(days=random.randint(1, 5))
+            
+            distributions.append((
+                str(uuid.uuid4()),
+                random.choice(merchant_ids),
+                random.choice(warehouse_ids),
+                delivery_date.strftime('%Y-%m-%d'),
+                random.choice(self.crop_types),
+                round(random.uniform(20, 500), 2),
+                "kg",
+                random.choice(priorities),
+                random.choice(delivery_methods),
+                round(random.uniform(2, 20), 2), # distance
+                round(random.uniform(2, 20), 2), # estimated_distance
+                round(random.uniform(20000, 200000), 2), # estimated_cost
+                status,
+                f"Distribusi simulasi #{i+1}",
+                datetime.now()
+            ))
+            
+        self.cursor.executemany('''
+            INSERT OR IGNORE INTO distributions (
+                id, merchant_id, warehouse_id, delivery_date, crop_type, quantity, unit, 
+                priority, delivery_method, distance, estimated_distance, estimated_cost, 
+                status, notes, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', distributions)
+    
     def generate_all_safe_data(self):
         """Generate safe simulation data for regular users"""
         print("🌾 Generating safe simulation data for agricultural inventory system...")
@@ -234,10 +294,13 @@ class SafeDummyDataGenerator:
             self.generate_safe_items(30)
             
             print("Generating harvests...")
-            self.generate_safe_harvests(25)
+            self.generate_safe_harvests(40) # Increased count
             
             print("Generating transactions...")
             self.generate_safe_transactions(50)
+            
+            print("Generating distributions...")
+            self.generate_safe_distributions(20)
             
             self.conn.commit()
             print("✅ Safe simulation data generation completed successfully!")
@@ -254,7 +317,7 @@ class SafeDummyDataGenerator:
     def print_safe_summary(self):
         """Print summary of generated safe data"""
         tables = ['users', 'warehouses', 'items', 'farmers', 'merchants', 'harvests', 
-                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications']
+                 'inventory_transactions', 'seeds', 'fertilizers', 'distribution_routes', 'notifications', 'distributions']
         
         print("\n📊 Safe Simulation Data Summary:")
         print("-" * 40)
