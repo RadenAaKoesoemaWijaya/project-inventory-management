@@ -233,6 +233,10 @@ def harvest_report():
         # Monthly trends
         st.subheader("📈 Tren Bulanan")
         
+        # Pastikan kolom 'bulan' ada di dataframe utama untuk keperluan groupby
+        if 'bulan' not in harvests_df.columns:
+            harvests_df['bulan'] = harvests_df['harvest_date_dt'].dt.strftime('%Y-%m')
+
         monthly_totals = harvests_df.groupby('bulan')['quantity'].sum().reset_index()
         
         if not monthly_totals.empty:
